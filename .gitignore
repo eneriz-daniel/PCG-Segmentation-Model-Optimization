@@ -1,0 +1,8 @@
+.vscode
+physionet.org/
+*-data/
+*-proc/
+*-CV/
+*.tgz
+models*
+*__pycache__/
