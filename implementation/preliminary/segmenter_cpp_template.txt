@@ -1,0 +1,186 @@
+// Copyright (C) 2023 Daniel Enériz and Antonio Rodriguez-Almeida
+// 
+// This file is part of PCG Segmentation Model Optimization.
+// 
+// PCG Segmentation Model Optimization is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// PCG Segmentation Model Optimization is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with PCG Segmentation Model Optimization.  If not, see <http://www.gnu.org/licenses/>.
+
+#include "segmenter.h"
+
+apfixed ReLU(apfixed x){
+
+    /* Rectified Linear Unit implementation.
+    Args:
+      x - Input value
+    Returns: The ReLU output of x
+    */
+
+    if(x<0) return 0;
+    else return x;
+}
+
+void Softmax(apfixed x[N_STATES], apfixed y[N_STATES]){
+
+  /* Softmax implementation
+  Args:
+    x - Input array to perform softmax
+    y - Array to save the softmax resultant values
+  */
+  
+  apfixed expx[N_STATES];
+
+  apfixed expsum = 0;
+
+  SoftmaxAccLoop: for(apint i=0; i<N_STATES; i++){
+    #ifdef FLOAT
+      expx[i] = exp(x[i]);
+    #endif
+    #ifdef FIXED
+      expx[i] = hls::expf(x[i]);
+    #endif
+    expsum += expx[i];
+  }
+
+  // To prevent division by zero errors, add EPSILON if expsum is zero
+  if(expsum == 0) expsum = EPSILON;
+
+  SoftmaxDivLoop: for(apint i=0; i<N_STATES; i++){
+    y[i] = expx[i]/expsum;
+  }
+}
+
+void Argmax(apfixed x[N_STATES], apfixed y[N_STATES]){
+
+  /* Argmax implementation
+  Args:
+    x - Input array to perform argmax
+    y - Array to save the argmax resultant values
+  */
+ 
+  apfixed maxvalue = MIN_VALUE;
+  apint maxindex = 0;
+  
+  ArgmaxCompLoop: for(apint i=0; i<N_STATES; i++){
+    if (x[i] > maxvalue){
+      maxvalue = x[i];
+      maxindex = i;
+    }
+  }
+
+  ArgmaxWriteLoop: for(apint i=0; i<N_STATES; i++){
+    if (i == maxindex) y[i] = 1;
+    else y[i] = 0;
+  }
+}
+
+void Segmenter(apfixed x[N][N_FEATURES],
+$enc_parameters_input_to_func               apfixed central_conv_relu_0_w[CENTRAL_CONV_RELU_0_K][CENTRAL_CONV_RELU_0_INPUT_FEATURES][CENTRAL_CONV_RELU_0_OUTPUT_FEATURES],
+               apfixed central_conv_relu_1_w[CENTRAL_CONV_RELU_1_K][CENTRAL_CONV_RELU_1_INPUT_FEATURES][CENTRAL_CONV_RELU_1_OUTPUT_FEATURES],
+$dec_parameters_input_to_func               apfixed final_conv_w[FINAL_CONV_K][FINAL_CONV_INPUT_FEATURES][FINAL_CONV_OUTPUT_FEATURES],
+               apfixed y[N][N_STATES]){
+    
+  // Set all the inputs to the function as s_axilite interfaces
+  #pragma HLS INTERFACE s_axilite port=x
+$enc_pragmas  #pragma HLS INTERFACE s_axilite port=central_conv_relu_0_w
+  #pragma HLS INTERFACE s_axilite port=central_conv_relu_1_w
+$dec_pragmas  #pragma HLS INTERFACE s_axilite port=final_conv_w
+  #pragma HLS INTERFACE s_axilite port=y 
+
+  // Set the return port as an AXI Lite interface
+  #pragma HLS INTERFACE s_axilite port=return
+
+  // Initialize the feature maps
+$enc_feature_maps_initialization
+  apfixed central_conv_relu_0[CENTRAL_CONV_RELU_0_N][CENTRAL_CONV_RELU_0_OUTPUT_FEATURES];
+  apfixed central_conv_relu_1[CENTRAL_CONV_RELU_1_N][CENTRAL_CONV_RELU_1_OUTPUT_FEATURES];
+$dec_feature_maps_initialization
+  apfixed final_conv[FINAL_CONV_N][FINAL_CONV_OUTPUT_FEATURES];
+
+  apfixed acc; // The accumulator
+
+  apint l_min; // Two auxiliary variables for the fitter's positions
+  apint l_max;
+
+$encoder_block
+
+  //--------------------------CENTRAL PART--------------------------------------
+
+  //-------------------------central_conv_relu_0----------------------------------
+  // Iterate over the number of filters
+  central_conv_relu_0_k: for(apint k=0; k<CENTRAL_CONV_RELU_0_OUTPUT_FEATURES; k++){
+    // Iterate over the input matrix
+    central_conv_relu_0_i: for(apint i=0; i<CENTRAL_CONV_RELU_0_N; i++){
+      // Calculate the auxiliary positions respect to the input
+      l_min = max(0, i - CENTRAL_CONV_RELU_0_K/2);
+      l_max = min(CENTRAL_CONV_RELU_0_N, i + CENTRAL_CONV_RELU_0_K/2 + 1);
+      acc = 0; // Reset the accumulator
+      central_conv_relu_0_l: for(apint l=l_min; l<l_max; l++){
+        central_conv_relu_0_j: for(apint j=0; j<CENTRAL_CONV_RELU_0_INPUT_FEATURES; j++){
+          // Multiply the input and the weight
+          acc += enc_${max_enc_i}_maxpool[l][j]*central_conv_relu_0_w[l-i+CENTRAL_CONV_RELU_0_K/2][j][k];
+        }
+      }
+      central_conv_relu_0[i][k] = ReLU(acc); // Save the accumulator value
+    }  
+  }
+  //----------------------------------------------------------------------------
+
+  //-------------------------central_conv_relu_1----------------------------------
+  // Iterate over the number of filters
+  central_conv_relu_1_k: for(apint k=0; k<CENTRAL_CONV_RELU_1_OUTPUT_FEATURES; k++){
+    // Iterate over the input matrix
+    central_conv_relu_1_i: for(apint i=0; i<CENTRAL_CONV_RELU_1_N; i++){
+      // Calculate the auxiliary positions respect to the input
+      l_min = max(0, i - CENTRAL_CONV_RELU_1_K/2);
+      l_max = min(CENTRAL_CONV_RELU_1_N, i + CENTRAL_CONV_RELU_1_K/2 + 1);
+      acc = 0; // Reset the accumulator
+      central_conv_relu_1_l: for(apint l=l_min; l<l_max; l++){
+        central_conv_relu_1_j: for(apint j=0; j<CENTRAL_CONV_RELU_1_INPUT_FEATURES; j++){
+          // Multiply the input and the weight
+          acc += central_conv_relu_0[l][j]*central_conv_relu_1_w[l-i+CENTRAL_CONV_RELU_1_K/2][j][k];
+        }
+      }
+      central_conv_relu_1[i][k] = ReLU(acc); // Save the accumulator value
+    }  
+  }
+  //----------------------------------------------------------------------------
+
+$decoder_block
+  //----------------------------FINAL CONV--------------------------------------
+  //----------------------------final_conv--------------------------------------
+  // Iterate over the number of filters
+  final_conv_k: for(apint k=0; k<FINAL_CONV_OUTPUT_FEATURES; k++){
+    // Iterate over the input matrix
+    final_conv_i: for(apint i=0; i<FINAL_CONV_N; i++){
+      // Calculate the auxiliary positions respect to the input
+      l_min = max(0, i - FINAL_CONV_K/2);
+      l_max = min(FINAL_CONV_N, i + FINAL_CONV_K/2 + 1);
+      acc = 0; // Reset the accumulator
+      final_conv_l: for(apint l=l_min; l<l_max; l++){
+        final_conv_j: for(apint j=0; j<FINAL_CONV_INPUT_FEATURES; j++){
+          // Multiply the input and the weight
+          acc += dec_${max_enc_i}_conv_relu_1[l][j]*final_conv_w[l-i+FINAL_CONV_K/2][j][k];
+        }
+      }
+      final_conv[i][k] = acc; // Save the accumulator value
+    }  
+  }
+
+  //----------------------------argmax-----------------------------------------
+  // Iterate over the input matrix
+  argmax_i: for(apint i=0; i<FINAL_CONV_N; i++){
+    Argmax(final_conv[i], y[i]);
+  }
+  //----------------------------------------------------------------------------
+
+}

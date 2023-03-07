@@ -1,0 +1,169 @@
+// Copyright (C) 2023 Daniel Enériz and Antonio Rodriguez-Almeida
+// 
+// This file is part of PCG Segmentation Model Optimization.
+// 
+// PCG Segmentation Model Optimization is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// PCG Segmentation Model Optimization is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with PCG Segmentation Model Optimization.  If not, see <http://www.gnu.org/licenses/>.
+
+//#include <iostream>
+#include <stdio.h>
+#include "segmenter.h"
+#include "npy_reading.h"
+
+#ifdef FLOAT
+    #include "segmenter.cpp"
+#endif
+
+int main() {
+
+    setvbuf(stdout, NULL, _IONBF, 0);
+
+    printf("Program started\n");
+    //cout << "Program started" << endl;
+
+    //Root path of the model
+    string parent_path = "${parent_directory}";
+    string project_path = "${project_directory}";
+    char subdirectory[256];
+
+    //------------------------INITIALIZE ARRAYS---------------------------------
+
+    // Initialize model parameters variables
+$enc_parameters_array_init_block
+    float central_conv_relu_0_tmp[CENTRAL_CONV_RELU_0_K*CENTRAL_CONV_RELU_0_INPUT_FEATURES*CENTRAL_CONV_RELU_0_OUTPUT_FEATURES];
+    int central_conv_relu_0_shape[4];
+    apfixed central_conv_relu_0_w[CENTRAL_CONV_RELU_0_K][CENTRAL_CONV_RELU_0_INPUT_FEATURES][CENTRAL_CONV_RELU_0_OUTPUT_FEATURES];
+
+    float central_conv_relu_1_tmp[CENTRAL_CONV_RELU_1_K*CENTRAL_CONV_RELU_1_INPUT_FEATURES*CENTRAL_CONV_RELU_1_OUTPUT_FEATURES];
+    int central_conv_relu_1_shape[4];
+    apfixed central_conv_relu_1_w[CENTRAL_CONV_RELU_1_K][CENTRAL_CONV_RELU_1_INPUT_FEATURES][CENTRAL_CONV_RELU_1_OUTPUT_FEATURES];
+
+$dec_parameters_array_init_block
+    float final_conv_tmp[FINAL_CONV_K*FINAL_CONV_INPUT_FEATURES*FINAL_CONV_OUTPUT_FEATURES];
+    int final_conv_shape[4];
+    apfixed final_conv_w[FINAL_CONV_K][FINAL_CONV_INPUT_FEATURES][FINAL_CONV_OUTPUT_FEATURES];
+
+    // Initialize the array to read the input
+    float x_tmp[TEST_SAMPLES_BATCH*N*N_FEATURES];
+    int x_shape[4];
+    apfixed x[TEST_SAMPLES_BATCH][N][N_FEATURES];
+
+    // Initialize the array to read the output
+    apfixed y[N][N_STATES];
+
+    //------------------READING THE MODEL PARAMETERS----------------------------
+
+$enc_parameters_reading_block
+    sprintf(subdirectory,"models/%d/N%d/n0%d/nenc%d/parameters/central_conv_relu_0.npy", DATASET, N, BASE_FILTER_SIZE, NENC);
+    GetFlatArrFromNpy(parent_path+subdirectory, central_conv_relu_0_tmp, central_conv_relu_0_shape);
+
+    // Reshape it
+    for(int k=0; k<CENTRAL_CONV_RELU_0_K; k++){
+      for(int j=0; j<CENTRAL_CONV_RELU_0_INPUT_FEATURES; j++){
+        for(int i=0; i<CENTRAL_CONV_RELU_0_OUTPUT_FEATURES; i++){
+          central_conv_relu_0_w[k][j][i] = central_conv_relu_0_tmp[i+CENTRAL_CONV_RELU_0_OUTPUT_FEATURES*j+CENTRAL_CONV_RELU_0_OUTPUT_FEATURES*CENTRAL_CONV_RELU_0_INPUT_FEATURES*k];
+        }
+      }
+    }
+
+    sprintf(subdirectory,"models/%d/N%d/n0%d/nenc%d/parameters/central_conv_relu_1.npy", DATASET, N, BASE_FILTER_SIZE, NENC);
+    GetFlatArrFromNpy(parent_path+subdirectory, central_conv_relu_1_tmp, central_conv_relu_1_shape);
+
+    // Reshape it
+    for(int k=0; k<CENTRAL_CONV_RELU_1_K; k++){
+      for(int j=0; j<CENTRAL_CONV_RELU_1_INPUT_FEATURES; j++){
+        for(int i=0; i<CENTRAL_CONV_RELU_1_OUTPUT_FEATURES; i++){
+          central_conv_relu_1_w[k][j][i] = central_conv_relu_1_tmp[i+CENTRAL_CONV_RELU_1_OUTPUT_FEATURES*j+CENTRAL_CONV_RELU_1_OUTPUT_FEATURES*CENTRAL_CONV_RELU_1_INPUT_FEATURES*k];
+        }
+      }
+    }
+$dec_parameters_reading_block
+    sprintf(subdirectory, "models/%d/N%d/n0%d/nenc%d/parameters/final_conv.npy", DATASET, N, BASE_FILTER_SIZE, NENC);
+    GetFlatArrFromNpy(parent_path+subdirectory, final_conv_tmp, final_conv_shape);
+
+    // Reshape it
+    for(int k=0; k<FINAL_CONV_K; k++){
+      for(int j=0; j<FINAL_CONV_INPUT_FEATURES; j++){
+        for(int i=0; i<FINAL_CONV_OUTPUT_FEATURES; i++){
+          final_conv_w[k][j][i] = final_conv_tmp[i+FINAL_CONV_OUTPUT_FEATURES*j+FINAL_CONV_OUTPUT_FEATURES*FINAL_CONV_INPUT_FEATURES*k];
+        }
+      }
+    }
+
+    
+    // Open the output file
+    sprintf(subdirectory,"%scsim-results.txt", project_path.c_str());
+    FILE *fp = fopen(subdirectory, "w");
+
+    // Iterate over the test files
+    for(int l=0; l<TEST_FILES; l++){
+
+      //-----------------------READING THE INPUT----------------------------------
+
+      // Reading an input element
+      sprintf(subdirectory,"%d-data/N%d-data/inputs/X_%d.npy", DATASET, N, l);
+      GetFlatArrFromNpy(parent_path+subdirectory, x_tmp, x_shape);
+
+      printf("Loading new input data (%d/%d)\n", l, TEST_FILES);
+      //cout << "Loading new input data (" << l << "/" << TEST_FILES << ")" << endl;
+
+      // Reshape it
+      for(int k=0; k<TEST_SAMPLES_BATCH; k++){
+        for(int j=0; j<N; j++){
+            for(int i=0; i<N_FEATURES; i++){
+                x[k][j][i] = x_tmp[i+j*N_FEATURES+k*N*N_FEATURES];
+            }
+        }
+      }
+
+      //-------------------------PROCESSING---------------------------------------
+
+      int offset = l*TEST_SAMPLES_BATCH; // Offset in the output file name counter, to avoid overwriting if multiple runs are done
+
+      for(int i=0; i<TEST_SAMPLES_BATCH; i++){
+
+        if(l*TEST_SAMPLES_BATCH+i >= TOTAL_SAMPLES){
+          break;
+        }
+
+        printf("%d/%d\n", l*TEST_SAMPLES_BATCH+i+1, TOTAL_SAMPLES);
+        //cout << l*TEST_SAMPLES_BATCH+i+1 << "/" << TOTAL_SAMPLES << endl;
+
+        // Call the segmenter
+        Segmenter(
+          x[i],
+${enc_parameters_to_func_block}          central_conv_relu_0_w,
+          central_conv_relu_1_w,
+${dec_parameters_to_func_block}          final_conv_w,
+          y
+        );
+
+        // Save the output flattened, using one line
+        for(int j=0; j<N; j++){
+          for(int k=0; k<N_FEATURES; k++){
+            fprintf(fp, "%.9f ", float(y[j][k])); // Use 9 decimal places to prevent increasing the quantization error in the writing process
+          }
+        }
+        fprintf(fp, "\n");
+
+      }
+    }
+
+    // Close the output file
+    fclose(fp);
+
+    printf("\nProgram completed!\n");
+    //cout << "Program completed!" << endl;
+
+    return 0;
+}

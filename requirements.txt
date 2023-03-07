@@ -1,0 +1,10 @@
+pandas==1.4.1
+librosa==0.9.1
+matplotlib==3.5.1
+tqdm==4.62.3
+tensorflow==2.8.0
+PyWavelets==1.2.0
+scipy==1.7.3
+audioread==2.1.9
+numpy==1.22.0
+

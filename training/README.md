@@ -14,7 +14,7 @@ This folder contains the code to preprocess the datasets, train the model and ev
 The data preparation is done using the [`preparedata.py`](preparedata.py) script. This script takes the raw data from the `physionet.org` folder and preprocesses it to generate the different subdatasets used in the project. This is a CLI-enabled script, so it can be run from the command line. In order to run them, you must first access the `training` folder:
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ cd training
+foo@bar:~/PCG-Segmentation-Model-Optimization$ cd training
 ```
 
 To launch the script, you must specify the dataset to preprocess. The available options are `--p2016` or `--p2022` for the 2016 PhysioNet/Computing in Cardiology Challenge dataset and the 2022 PhysioNet/Computing in Cardiology Challenge dataset, respectively. For example, to preprocess the 2016 dataset, you can run:

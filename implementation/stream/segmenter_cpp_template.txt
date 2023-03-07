@@ -1,0 +1,984 @@
+// Copyright (C) 2023 Daniel Enériz and Antonio Rodriguez-Almeida
+// 
+// This file is part of PCG Segmentation Model Optimization.
+// 
+// PCG Segmentation Model Optimization is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// PCG Segmentation Model Optimization is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with PCG Segmentation Model Optimization.  If not, see <http://www.gnu.org/licenses/>.
+
+#include "segmenter.h"
+
+/**
+ * @brief Implementation of the ReLU function. It is meant to be used under
+ *       Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It takes a apfixed scalar and returns a apfixed scalar. The output is the
+ * ReLU of the input. This is an special case in this library, since it is
+ * meant to used inside the layer implementations, operating on scalar values.
+ * 
+ * @param x The input value. It must be a apfixed scalar.
+ * @return apfixed The ReLU output of x. It will be a apfixed scalar.
+ */
+apfixed ReLU(apfixed x){
+  // Always inline this function
+  #pragma HLS INLINE
+  
+  if(x<0) return 0;
+  else return x;
+}
+
+/**
+ * @brief Implementation of the Softmax function. It is meant to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware. It uses
+ *        the hls::expf function to compute the exponential of each element.
+ * 
+ *  TODO: Test this function
+ * 
+ * @tparam N_SIZE Number of time steps in the input and output
+ * @tparam FEATURES Number of features in the input and output
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · FEATURES elements.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · FEATURES elements.
+ */
+template <apint FEATURES, apint N_SIZE>
+void Softmax(apfixed_stream &x, apfixed_stream &y){
+  
+  // Initialize buffers and accumulators
+  apfixed expx[FEATURES];
+  apfixed expsum;
+  
+  // Iterate over the time steps
+  loop_i: for (apint i=0; i<N_SIZE; i++){
+    expsum = 0;
+    
+    // Compute the exponential of each element and sum them
+    acc_loop: for(apint j=0; j<FEATURES; j++){
+      expx[j] = hls::expf(x.read());
+
+      expsum += expx[j];
+    }
+
+    #ifdef EPSILON
+      // To prevent division by zero errors, add EPSILON if expsum is zero
+      if(expsum == 0) expsum = EPSILON;
+    #endif
+
+    write_loop: for(apint j=0; j<FEATURES; j++){
+      y << expx[j]/expsum;
+    }
+  }
+}
+
+/**
+ * @brief Implementation of the Argmax function. It is meant to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It takes a stream of N_SIZE · FEATURES elements and returns a stream of
+ * N_SIZE · FEATURES elements. The output stream is a one-hot encoding of the
+ * maximum value of each input column (i.e. the vector for a given i index).
+ * 
+ * @tparam N_SIZE Number of time steps in the input and output
+ * @tparam FEATURES Number of features in the input and output
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · FEATURES elements.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · FEATURES elements.
+ */
+template <apint FEATURES, apint N_SIZE>
+void Argmax(apfixed_stream &x, apfixed_stream &y){
+
+  apfixed maxvalue, in_val;
+  apint maxindex;
+
+  loop_i: for (apint i=0; i<N_SIZE; i++){
+    maxvalue = x.read();
+    maxindex = 0;
+
+    comp_loop: for(apint j=1; j<FEATURES; j++){
+      in_val = x.read();
+      if (in_val > maxvalue){
+        maxvalue = in_val;
+        maxindex = j;
+      }
+    }
+
+    write_loop: for(apint j=0; j<FEATURES; j++){
+      if (j == maxindex) y << 1;
+      else y << 0;
+    }
+  }
+}
+
+
+/**
+ * @brief 1D convolutional layer implementation with linear activation that
+ *        works as in Keras using the same padding method. It is meant to be 
+ *        used under Vivado HLS, so it is written to be synthesized into
+ *        hardware.
+ * 
+ * @tparam KERNEL Kernel size
+ * @tparam INPUT_FEATURES Number of input features
+ * @tparam OUTPUT_FEATURES Number of output features
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · INPUT_FEATURES elements.
+ * @param w Kernel weights. It must be a 3D array of apfixed values with shape
+ *          KERNEL · INPUT_FEATURES · OUTPUT_FEATURES
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · OUTPUT_FEATURES elements.
+ */
+template <apint KERNEL, apint INPUT_FEATURES, apint OUTPUT_FEATURES, apint N_SIZE>
+void Conv1D(apfixed_stream &x,
+		    apfixed w[KERNEL][INPUT_FEATURES][OUTPUT_FEATURES],
+		    apfixed_stream &y){
+  
+	/*! Initialize buffers and accumulators
+  * There are four memories:
+  * - in_val: Scalar storing the last read value of the layer input stream
+  * - buff_val: Scalar storing a value read form the layer buffer,
+  *      or in_val if it is time to store the last stream value in the buffer
+  * - acc: Array storing the accumulator values for the layer. It's
+  *      a vector of length OUTPUT_FEATURES and must be manually initialized to 0.
+  * - buffer: Array storing the buffer values for the layer. It's a
+  *      matrix with shape KERNEL-1 by INPUT_FEATURES. As the loop_i is
+  *      extended KERNEL/2 times in both sides (to preserve the dimensionality,
+  *      padding same) it doesn't have to be initialized, since in_val is set
+  *      to 0 during the out-of-bounds epochs
+  */
+  apfixed in_val; // Last read value of the stream
+  apfixed buff_val; // Last read value of the buffer
+	apfixed acc[OUTPUT_FEATURES]; // Accumulator array
+	apfixed buffer[KERNEL-1][INPUT_FEATURES]; // Buffer array
+
+	// Initialize the accumulator to 0
+	acc_init: for(apint i=0; i<OUTPUT_FEATURES; i++){
+	acc[i] = 0;
+	}
+
+	// Iterate over the time dimension. Expand the counter half of the kernel
+  // size to the left and right to enable "same" padding method
+	loop_i: for(apint i=-1; i<N_SIZE+1; i++){
+		
+    // Iterate over the input features
+		loop_j: for(apint j=0; j<INPUT_FEATURES; j++){
+			
+      // Read from the stream if i is in the real bounds, otherwise read 0, to
+      // use the hardware to initialize the buffer
+			if(i>-1 && i<N_SIZE) in_val = x.read();
+			else in_val = 0;
+
+			// Iterate over the kernel
+			loop_l: for(apint l=0; l<KERNEL; l++){
+				
+        //#pragma HLS pipeline
+				
+        // Iterate over the ouput features
+				loop_k: for(apint k=0; k<OUTPUT_FEATURES; k++){
+          // At the first iteration, read from the buffer. If the sought value
+          // is not in the buffer, read the last read value from the input stream
+					if(k == 0) buff_val = l < KERNEL-1 ? buffer[l][j] : in_val;
+
+          // Multiply the value read from the buffer by the corresponding weight
+          // and add it to the accumulator
+					acc[k] += buff_val * w[l][j][k];
+          
+          // At the last input feature and kernel iteration
+					if (j==INPUT_FEATURES-1 && l==2){
+            // Write the result to the output stream, if the current iteration
+            // is in the real bounds
+						if(i >= KERNEL/2) y << acc[k];
+            
+            // Reset the accumulator
+						acc[k] = 0;
+					}
+          
+          // At the last output feature iteration shift the buffer
+					if(k == OUTPUT_FEATURES-1 && l>0) buffer[l-1][j] = buff_val;
+				}
+			}
+		}
+	}
+}
+
+/**
+ * @brief 1D convolutional layer implementation with ReLU activation that works
+ *        as in Keras using the same padding method. It is meant to be used
+ *        under Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * @tparam KERNEL Kernel size
+ * @tparam INPUT_FEATURES Number of input features
+ * @tparam OUTPUT_FEATURES Number of output features
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · INPUT_FEATURES elements.
+ * @param w Kernel weights. It must be a 3D array of apfixed values with shape
+ *          KERNEL · INPUT_FEATURES · OUTPUT_FEATURES
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · OUTPUT_FEATURES elements.
+ */
+template <apint KERNEL, apint INPUT_FEATURES, apint OUTPUT_FEATURES, apint N_SIZE>
+void Conv1D_ReLU(apfixed_stream &x,
+		    apfixed w[KERNEL][INPUT_FEATURES][OUTPUT_FEATURES],
+		    apfixed_stream &y){
+  
+	/*! Initialize buffers and accumulators
+  * There are four memories:
+  * - in_val: Scalar storing the last read value of the layer input stream
+  * - buff_val: Scalar storing a value read form the layer buffer,
+  *      or in_val if it is time to store the last stream value in the buffer
+  * - acc: Array storing the accumulator values for the layer. It's
+  *      a vector of length OUTPUT_FEATURES and must be manually initialized to 0.
+  * - buffer: Array storing the buffer values for the layer. It's a
+  *      matrix with shape KERNEL-1 by INPUT_FEATURES. As the loop_i is
+  *      extended KERNEL/2 times in both sides (to preserve the dimensionality,
+  *      padding same) it doesn't have to be initialized, since in_val is set
+  *      to 0 during the out-of-bounds epochs
+  */
+  apfixed in_val; // Last read value of the stream
+  apfixed buff_val; // Last read value of the buffer
+	apfixed acc[OUTPUT_FEATURES]; // Accumulator array
+	apfixed buffer[KERNEL-1][INPUT_FEATURES]; // Buffer array
+
+	// Initialize the accumulator to 0
+	acc_init: for(apint i=0; i<OUTPUT_FEATURES; i++){
+	acc[i] = 0;
+	}
+
+	// Iterate over the time dimension. Expand the counter half of the kernel
+  // size to the left and right to enable "same" padding method
+	loop_i: for(apint i=-1; i<N_SIZE+1; i++){
+		
+    // Iterate over the input features
+		loop_j: for(apint j=0; j<INPUT_FEATURES; j++){
+			
+      // Read from the stream if i is in the real bounds, otherwise read 0, to
+      // use the hardware to initialize the buffer
+			if(i>-1 && i<N_SIZE) in_val = x.read();
+			else in_val = 0;
+
+			// Iterate over the kernel
+			loop_l: for(apint l=0; l<KERNEL; l++){
+				
+        //#pragma HLS pipeline
+				
+        // Iterate over the ouput features
+				loop_k: for(apint k=0; k<OUTPUT_FEATURES; k++){
+          // At the first iteration, read from the buffer. If the sought value
+          // is not in the buffer, read the last read value from the input stream
+					if(k == 0) buff_val = l < KERNEL-1 ? buffer[l][j] : in_val;
+
+          // Multiply the value read from the buffer by the corresponding weight
+          // and add it to the accumulator
+					acc[k] += buff_val * w[l][j][k];
+          
+          // At the last input feature and kernel iteration
+					if (j==INPUT_FEATURES-1 && l==2){
+            // Write the result to the output stream, if the current iteration
+            // is in the real bounds
+						if(i >= KERNEL/2) y << ReLU(acc[k]);
+            
+            // Reset the accumulator
+						acc[k] = 0;
+					}
+          
+          // At the last output feature iteration shift the buffer
+					if(k == OUTPUT_FEATURES-1 && l>0) buffer[l-1][j] = buff_val;
+				}
+			}
+		}
+	}
+}
+
+
+/**
+ * @brief 1D convolutional layer implementation with linear activation that
+ *        works as in Keras using the same padding method. It is meant to be 
+ *        used under Vivado HLS, so it is written to be synthesized into
+ *        hardware. Its second innermost loop is pipelined to improve
+ *        performance.
+ * 
+ * @tparam KERNEL Kernel size
+ * @tparam INPUT_FEATURES Number of input features
+ * @tparam OUTPUT_FEATURES Number of output features
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · INPUT_FEATURES elements.
+ * @param w Kernel weights. It must be a 3D array of apfixed values with shape
+ *          KERNEL · INPUT_FEATURES · OUTPUT_FEATURES
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · OUTPUT_FEATURES elements.
+ */
+template <apint KERNEL, apint INPUT_FEATURES, apint OUTPUT_FEATURES, apint N_SIZE>
+void Conv1D_pipelined(apfixed_stream &x,
+		                  apfixed w[KERNEL][INPUT_FEATURES][OUTPUT_FEATURES],
+		                  apfixed_stream &y){
+  
+	/*! Initialize buffers and accumulators
+  * There are four memories:
+  * - in_val: Scalar storing the last read value of the layer input stream
+  * - buff_val: Scalar storing a value read form the layer buffer,
+  *      or in_val if it is time to store the last stream value in the buffer
+  * - acc: Array storing the accumulator values for the layer. It's
+  *      a vector of length OUTPUT_FEATURES and must be manually initialized to 0.
+  * - buffer: Array storing the buffer values for the layer. It's a
+  *      matrix with shape KERNEL-1 by INPUT_FEATURES. As the loop_i is
+  *      extended KERNEL/2 times in both sides (to preserve the dimensionality,
+  *      padding same) it doesn't have to be initialized, since in_val is set
+  *      to 0 during the out-of-bounds epochs
+  */
+  apfixed in_val; // Last read value of the stream
+  apfixed buff_val; // Last read value of the buffer
+	apfixed acc[OUTPUT_FEATURES]; // Accumulator array
+	apfixed buffer[KERNEL-1][INPUT_FEATURES]; // Buffer array
+
+	// Initialize the accumulator to 0
+	acc_init: for(apint i=0; i<OUTPUT_FEATURES; i++){
+	acc[i] = 0;
+	}
+
+	// Iterate over the time dimension. Expand the counter half of the kernel
+  // size to the left and right to enable "same" padding method
+	loop_i: for(apint i=-1; i<N_SIZE+1; i++){
+		
+    // Iterate over the input features
+		loop_j: for(apint j=0; j<INPUT_FEATURES; j++){
+			
+      // Read from the stream if i is in the real bounds, otherwise read 0, to
+      // use the hardware to initialize the buffer
+			if(i>-1 && i<N_SIZE) in_val = x.read();
+			else in_val = 0;
+
+			// Iterate over the kernel
+			loop_l: for(apint l=0; l<KERNEL; l++){
+				
+        #pragma HLS pipeline
+				
+        // Iterate over the ouput features
+				loop_k: for(apint k=0; k<OUTPUT_FEATURES; k++){
+          // At the first iteration, read from the buffer. If the sought value
+          // is not in the buffer, read the last read value from the input stream
+					if(k == 0) buff_val = l < KERNEL-1 ? buffer[l][j] : in_val;
+
+          // Multiply the value read from the buffer by the corresponding weight
+          // and add it to the accumulator
+					acc[k] += buff_val * w[l][j][k];
+          
+          // At the last input feature and kernel iteration
+					if (j==INPUT_FEATURES-1 && l==2){
+            // Write the result to the output stream, if the current iteration
+            // is in the real bounds
+						if(i >= KERNEL/2) y << acc[k];
+            
+            // Reset the accumulator
+						acc[k] = 0;
+					}
+          
+          // At the last output feature iteration shift the buffer
+					if(k == OUTPUT_FEATURES-1 && l>0) buffer[l-1][j] = buff_val;
+				}
+			}
+		}
+	}
+}
+
+/**
+ * @brief 1D convolutional layer implementation with ReLU activation that works
+ *        as in Keras using the same padding method. It is meant to be used
+ *        under Vivado HLS, so it is written to be synthesized into hardware.
+ *        Its second innermost loop is pipelined to improve performance.
+ * 
+ * @tparam KERNEL Kernel size
+ * @tparam INPUT_FEATURES Number of input features
+ * @tparam OUTPUT_FEATURES Number of output features
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · INPUT_FEATURES elements.
+ * @param w Kernel weights. It must be a 3D array of apfixed values with shape
+ *          KERNEL · INPUT_FEATURES · OUTPUT_FEATURES
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · OUTPUT_FEATURES elements.
+ */
+template <apint KERNEL, apint INPUT_FEATURES, apint OUTPUT_FEATURES, apint N_SIZE>
+void Conv1D_ReLU_pipelined(apfixed_stream &x,
+		                       apfixed w[KERNEL][INPUT_FEATURES][OUTPUT_FEATURES],
+		                       apfixed_stream &y){
+  
+	/*! Initialize buffers and accumulators
+  * There are four memories:
+  * - in_val: Scalar storing the last read value of the layer input stream
+  * - buff_val: Scalar storing a value read form the layer buffer,
+  *      or in_val if it is time to store the last stream value in the buffer
+  * - acc: Array storing the accumulator values for the layer. It's
+  *      a vector of length OUTPUT_FEATURES and must be manually initialized to 0.
+  * - buffer: Array storing the buffer values for the layer. It's a
+  *      matrix with shape KERNEL-1 by INPUT_FEATURES. As the loop_i is
+  *      extended KERNEL/2 times in both sides (to preserve the dimensionality,
+  *      padding same) it doesn't have to be initialized, since in_val is set
+  *      to 0 during the out-of-bounds epochs
+  */
+  apfixed in_val; // Last read value of the stream
+  apfixed buff_val; // Last read value of the buffer
+	apfixed acc[OUTPUT_FEATURES]; // Accumulator array
+	apfixed buffer[KERNEL-1][INPUT_FEATURES]; // Buffer array
+
+  // Partition the accumulator array to improve performance
+  //#pragma HLS array_partition variable=acc complete
+
+	// Initialize the accumulator to 0
+	acc_init: for(apint i=0; i<OUTPUT_FEATURES; i++){
+	acc[i] = 0;
+	}
+
+	// Iterate over the time dimension. Expand the counter half of the kernel
+  // size to the left and right to enable "same" padding method
+	loop_i: for(apint i=-1; i<N_SIZE+1; i++){
+		
+    // Iterate over the input features
+		loop_j: for(apint j=0; j<INPUT_FEATURES; j++){
+			
+      // Read from the stream if i is in the real bounds, otherwise read 0, to
+      // use the hardware to initialize the buffer
+			if(i>-1 && i<N_SIZE) in_val = x.read();
+			else in_val = 0;
+
+			// Iterate over the kernel
+			loop_l: for(apint l=0; l<KERNEL; l++){
+				
+        //#pragma HLS pipeline
+				
+        // Iterate over the ouput features
+				loop_k: for(apint k=0; k<OUTPUT_FEATURES; k++){
+          
+          #pragma HLS PIPELINE
+
+          // At the first iteration, read from the buffer. If the sought value
+          // is not in the buffer, read the last read value from the input stream
+					if(k == 0) buff_val = l < KERNEL-1 ? buffer[l][j] : in_val;
+
+          // Multiply the value read from the buffer by the corresponding weight
+          // and add it to the accumulator
+					acc[k] += buff_val * w[l][j][k];
+          
+          // At the last input feature and kernel iteration
+					if (j==INPUT_FEATURES-1 && l==2){
+            // Write the result to the output stream, if the current iteration
+            // is in the real bounds
+						if(i >= KERNEL/2) y << ReLU(acc[k]);
+            
+            // Reset the accumulator
+						acc[k] = 0;
+					}
+          
+          // At the last output feature iteration shift the buffer
+					if(k == OUTPUT_FEATURES-1 && l>0) buffer[l-1][j] = buff_val;
+				}
+			}
+		}
+	}
+}
+
+/**
+ * @brief 1D max pooling layer implementation that works as in Keras using a
+ *        kernel size of 2. It is meant to be used under Vivado HLS, so it is
+ *        written to be synthesized into hardware. Halves the size of the time
+ *        dimension.
+ * 
+ * @tparam FEATURES Number of features in the input and output streams
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · FEATURES elements.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE/2 · FEATURES elements.
+ */
+template <apint FEATURES, apint N_SIZE>
+void MaxPool1D(apfixed_stream &x,
+               apfixed_stream &y){
+  // Declare a buffer to store the values read in the even i iterations
+  apfixed buffer[FEATURES];
+  // Iterate over the time dimension
+  loop_i: for(apint i=0; i<N_SIZE; i++){
+
+    // Iterate over the features
+    loop_k: for(apint j=0; j<FEATURES; j++){
+      // At even i iterations read from the stream and store the values in the
+      // buffer
+      if(i%2 == 0) buffer[j] = x.read();
+      // At odd i iterations read from the buffer and write the maximum value
+      // to the output stream
+      else y << max(buffer[j], x.read());
+    }
+  }
+}
+
+/**
+ * @brief 1D max pooling layer implementation that works as in Keras using a
+ *        kernel size of 2. It is meant to be used under Vivado HLS, so it is
+ *        written to be synthesized into hardware.
+ * 
+ * 
+ * Halves the size of the time dimension. The input stream is stored in a memory
+ * to be used as skip connections.
+ * 
+ * @tparam FEATURES Number of features in the input and output streams
+ * @tparam N_SIZE Number of time steps in the input
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_SIZE · FEATURES elements.
+ * @param x_memory Memory to store the values read from the input stream. It is
+ *                 a 2D array with shape N_SIZE by FEATURES. It is used to store
+ *                 the read values, so that they can be used as skip connections.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE/2 · FEATURES elements.
+ */
+template <apint FEATURES, apint N_SIZE>
+void MaxPool1DSkipConn(apfixed_stream &x,
+               apfixed x_memory[N_SIZE][FEATURES],
+               apfixed_stream &y){
+  // Iterate over the time dimension
+  loop_i: for(apint i=0; i<N_SIZE; i++){
+
+    // Iterate over the features
+    loop_k: for(apint j=0; j<FEATURES; j++){
+
+      // Store the read value in the memory
+      x_memory[i][j] = x.read();
+      
+      // At odd iterations, write the maximum value to the output stream
+      if(i%2 == 1) y << max(x_memory[i-1][j], x_memory[i][j]);
+    }
+  }
+}
+
+/**
+ * @brief Implementation of the encoder block. It is meant to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It is composed of two 1D convolutional layers with ReLU activation and a 1D
+ * max pooling layer. The functios is manually inlined in the top function. The
+ * output of the second convolutional layer is saved to used as skip connection.
+ * 
+ * @tparam CONV_RELU_0_K Kernel size of the first convolutional layer
+ * @tparam CONV_RELU_0_INPUT_FEATURES Number of input features of the first
+ *                                    convolutional layer
+ * @tparam CONV_RELU_0_OUTPUT_FEATURES Number of output features of the first
+ *                                     convolutional layer
+ * @tparam CONV_RELU_0_N Time steps of the input of the first convolutional
+ *                       layer
+ * @tparam CONV_RELU_1_K Kernel size of the second convolutional layer
+ * @tparam CONV_RELU_1_INPUT_FEATURES Number of input features of the second
+ *                                    convolutional layer
+ * @tparam CONV_RELU_1_OUTPUT_FEATURES Number of output features of the second
+ *                                     convolutional layer
+ * @tparam CONV_RELU_1_N Time steps of the input of the second convolutional
+ *                       layer
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          CONV_RELU_0_N · CONV_RELU_0_INPUT_FEATURES elements.
+ * @param conv_relu_0_w Kernel weights of the first convolutional layer. It
+ *                      must be a 3D array of apfixed values with shape
+ *                      CONV_RELU_0_K · CONV_RELU_0_INPUT_FEATURES ·
+ *                      CONV_RELU_0_OUTPUT_FEATURES.
+ * @param conv_relu_1_w Kernel weights of the second convolutional layer. It
+ *                     must be a 3D array of apfixed values with shape
+ *                     CONV_RELU_1_K · CONV_RELU_1_INPUT_FEATURES ·
+ *                     CONV_RELU_1_OUTPUT_FEATURES.
+ * @param conv_relu_1_out Output memory. It must be a 2D array of apfixed values
+ *                        with shape CONV_RELU_1_N · CONV_RELU_1_OUTPUT_FEATURES.
+ *                        It will store the output of the second convolutional
+ *                        layer to be used as a skip connection.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          CONV_RELU_1_N/2 · CONV_RELU_1_OUTPUT_FEATURES elements.
+ */
+template <apint CONV_RELU_0_K, apint CONV_RELU_0_INPUT_FEATURES, apint CONV_RELU_0_OUTPUT_FEATURES, apint CONV_RELU_0_N,
+          apint CONV_RELU_1_K, apint CONV_RELU_1_INPUT_FEATURES, apint CONV_RELU_1_OUTPUT_FEATURES, apint CONV_RELU_1_N>
+void Encoder(apfixed_stream &x,
+             apfixed conv_relu_0_w[CONV_RELU_0_K][CONV_RELU_0_INPUT_FEATURES][CONV_RELU_0_OUTPUT_FEATURES],
+             apfixed conv_relu_1_w[CONV_RELU_1_K][CONV_RELU_1_INPUT_FEATURES][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed conv_relu_1_out[CONV_RELU_1_N][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed_stream &y){
+  
+  // Inline this functiion in the top function
+  #pragma HLS INLINE
+
+  // The feature maps streams are initialized as *_outstream
+	apfixed_stream conv_relu_0_outstream("conv_relu_0_outstream");
+  apfixed_stream conv_relu_1_outstream("conv_relu_1_outstream");
+
+  #pragma HLS DATAFLOW
+
+  // Apply the first convolutional layer
+	Conv1D_ReLU<CONV_RELU_0_K, CONV_RELU_0_INPUT_FEATURES, CONV_RELU_0_OUTPUT_FEATURES, CONV_RELU_0_N>(x, conv_relu_0_w, conv_relu_0_outstream);
+	
+  // Apply the second convolutional layer
+  Conv1D_ReLU<CONV_RELU_1_K, CONV_RELU_1_INPUT_FEATURES, CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_0_outstream, conv_relu_1_w, conv_relu_1_outstream);
+  
+  // Apply the max pooling layer
+  MaxPool1DSkipConn<CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_1_outstream, conv_relu_1_out, y);
+
+}
+
+/**
+ * @brief Implementation of the encoder block. It is meant to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It is composed of two 1D convolutional layers with ReLU activation and a 1D
+ * max pooling layer. The functios is manually inlined in the top function. The
+ * output of the second convolutional layer is saved to used as skip connection.
+ * 
+ * @tparam CONV_RELU_0_K Kernel size of the first convolutional layer
+ * @tparam CONV_RELU_0_INPUT_FEATURES Number of input features of the first
+ *                                    convolutional layer
+ * @tparam CONV_RELU_0_OUTPUT_FEATURES Number of output features of the first
+ *                                     convolutional layer
+ * @tparam CONV_RELU_0_N Time steps of the input of the first convolutional
+ *                       layer
+ * @tparam CONV_RELU_1_K Kernel size of the second convolutional layer
+ * @tparam CONV_RELU_1_INPUT_FEATURES Number of input features of the second
+ *                                    convolutional layer
+ * @tparam CONV_RELU_1_OUTPUT_FEATURES Number of output features of the second
+ *                                     convolutional layer
+ * @tparam CONV_RELU_1_N Time steps of the input of the second convolutional
+ *                       layer
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          CONV_RELU_0_N · CONV_RELU_0_INPUT_FEATURES elements.
+ * @param conv_relu_0_w Kernel weights of the first convolutional layer. It
+ *                      must be a 3D array of apfixed values with shape
+ *                      CONV_RELU_0_K · CONV_RELU_0_INPUT_FEATURES ·
+ *                      CONV_RELU_0_OUTPUT_FEATURES.
+ * @param conv_relu_1_w Kernel weights of the second convolutional layer. It
+ *                     must be a 3D array of apfixed values with shape
+ *                     CONV_RELU_1_K · CONV_RELU_1_INPUT_FEATURES ·
+ *                     CONV_RELU_1_OUTPUT_FEATURES.
+ * @param conv_relu_1_out Output memory. It must be a 2D array of apfixed values
+ *                        with shape CONV_RELU_1_N · CONV_RELU_1_OUTPUT_FEATURES.
+ *                        It will store the output of the second convolutional
+ *                        layer to be used as a skip connection.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          CONV_RELU_1_N/2 · CONV_RELU_1_OUTPUT_FEATURES elements.
+ */
+template <apint CONV_RELU_0_K, apint CONV_RELU_0_INPUT_FEATURES, apint CONV_RELU_0_OUTPUT_FEATURES, apint CONV_RELU_0_N,
+          apint CONV_RELU_1_K, apint CONV_RELU_1_INPUT_FEATURES, apint CONV_RELU_1_OUTPUT_FEATURES, apint CONV_RELU_1_N>
+void Encoder_pipelined(apfixed_stream &x,
+             apfixed conv_relu_0_w[CONV_RELU_0_K][CONV_RELU_0_INPUT_FEATURES][CONV_RELU_0_OUTPUT_FEATURES],
+             apfixed conv_relu_1_w[CONV_RELU_1_K][CONV_RELU_1_INPUT_FEATURES][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed conv_relu_1_out[CONV_RELU_1_N][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed_stream &y){
+  
+  // Inline this functiion in the top function
+  #pragma HLS INLINE
+
+  // The feature maps streams are initialized as *_outstream
+	apfixed_stream conv_relu_0_outstream("conv_relu_0_outstream");
+  apfixed_stream conv_relu_1_outstream("conv_relu_1_outstream");
+
+  #pragma HLS DATAFLOW
+
+  // Apply the first convolutional layer
+	Conv1D_ReLU_pipelined<CONV_RELU_0_K, CONV_RELU_0_INPUT_FEATURES, CONV_RELU_0_OUTPUT_FEATURES, CONV_RELU_0_N>(x, conv_relu_0_w, conv_relu_0_outstream);
+	
+  // Apply the second convolutional layer
+  Conv1D_ReLU_pipelined<CONV_RELU_1_K, CONV_RELU_1_INPUT_FEATURES, CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_0_outstream, conv_relu_1_w, conv_relu_1_outstream);
+  
+  // Apply the max pooling layer
+  MaxPool1DSkipConn<CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_1_outstream, conv_relu_1_out, y);
+
+}
+
+/**
+ * @brief Implementation of the 1d upsampling layer. It is meant to be used
+ *        under Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It doubles the number of time steps of the input matrix by duplicating each
+ * feature column.
+ * 
+ * @tparam FEATURES Number of features of the input
+ * @tparam N_OUTPUT Time steps of the output
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          N_OUTPUT/2 · FEATURES elements.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_OUTPUT · FEATURES elements.
+ */
+template <apint FEATURES, apint N_OUTPUT>
+void UpSample1D(apfixed_stream &x,
+                apfixed_stream &y){
+  // Initialize a buffer to store an array of FEATURES elements read from the
+  // input stream
+  apfixed buffer[FEATURES];
+
+  // Iterate over the input matrix
+  loop_i: for(apint i=0; i<N_OUTPUT; i++){
+    
+    // Iterate over the number of filters
+    loop_j: for(apint j=0; j<FEATURES; j++){
+      // At even time positions, read from the input stream to the buffer and
+      // write to the output stream
+      if(i%2 == 0){
+        buffer[j] = x.read();
+        y << buffer[j];
+      }
+      // At odd time positions, write the value of the previous time position
+      // to the output stream
+      else{
+        y << buffer[j];
+      }
+    }
+  }
+}
+
+/**
+ * @brief Implementation of the concatenation layer. It is meant to be used
+ *        under Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It concatenates two inputs with the same number of features, so the output
+ * will have twice the number of features of the inputs.
+ * 
+ * @tparam INPUT_FEATURES Number of features of the inputs
+ * @tparam N_SIZE Number of time steps of the inputs and output
+ * @param x1 First input. It must be a 2D array of apfixed values with shape
+ *          N_SIZE · INPUT_FEATURES. This is the skip connection from the
+ *          encoder previously saved on memory.
+ * @param x2 Second input.  It must be a stream of apfixed values. It must have
+ *           N_SIZE · INPUT_FEATURES elements. 
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          N_SIZE · 2*INPUT_FEATURES elements.
+ */
+template <apint INPUT_FEATURES, apint N_SIZE>
+void Concatenate(apfixed x1[N_SIZE][INPUT_FEATURES],
+                 apfixed_stream &x2,
+                 apfixed_stream &y){
+
+  // Iterate over the time steps
+  loop_i: for(apint i=0; i<N_SIZE; i++){  
+
+    // Iterate over the number of input features
+    loop_j: for(apint j=0; j<2*INPUT_FEATURES; j++){
+    
+      // Write the first input stream to the output stream
+      if(j<INPUT_FEATURES){
+        y << x1[i][j];
+      }
+      // Write the second input matrix to the output stream
+      else{
+        y << x2.read();
+      }
+    }
+  }
+}
+
+/**
+ * @brief Implementation of the decoder block. It is mean to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It is composed of a 1d upsampling layer, a 1D convolutional layer, a
+ * concatenation layer that adds the skip connection coming from the encoder,
+ * and two 1d convolutional layers with ReLU activation. It is manually inlined
+ * into the top function.
+ * 
+ * @tparam UP_CONV_RELU_K Kernel size of the upsampling convolutional layer
+ * @tparam UP_CONV_RELU_INPUT_FEATURES Number of input features of the
+ *                                     upsampling convolutional layer
+ * @tparam UP_CONV_RELU_OUTPUT_FEATURES Number of output features of the
+ *                                      upsampling convolutional layer
+ * @tparam UP_CONV_RELU_N Number of time steps of the output of the upsampling
+ *                        convolutional layer
+ * @tparam CONV_RELU_0_K Kernel size of the first convolutional layer
+ * @tparam CONV_RELU_0_INPUT_FEATURES Number of input features of the first
+ *                                    convolutional layer
+ * @tparam CONV_RELU_0_OUTPUT_FEATURES Number of output features of the first
+ *                                     convolutional layer
+ * @tparam CONV_RELU_0_N Number of time steps of the first convolutional layer
+ * @tparam CONV_RELU_1_K Kernel size of the second convolutional layer
+ * @tparam CONV_RELU_1_INPUT_FEATURES Number of input features of the second
+ *                                    convolutional layer
+ * @tparam CONV_RELU_1_OUTPUT_FEATURES Number of output features of the second
+ *                                     convolutional layer
+ * @tparam CONV_RELU_1_N Number of time steps of the second convolutional layer
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          UP_CONV_RELU_N · UP_CONV_RELU_INPUT_FEATURES elements.
+ * @param up_conv_relu_w Kernel weights of the upsampling convolutional layer.
+ *                       It must be a 2D array of apfixed values with shape
+ *                       UP_CONV_RELU_K · UP_CONV_RELU_INPUT_FEATURES ·
+ *                       UP_CONV_RELU_OUTPUT_FEATURES.
+ * @param skip_conn Skip connection from the encoder. It must be a 2D array of
+ *                  apfixed values with shape UP_CONV_RELU_N · 
+ *                  UP_CONV_RELU_OUTPUT_FEATURES.
+ * @param conv_relu_0_w Kernel weights of the first convolutional layer. It
+ *                      must be a 2D array of apfixed values with shape
+ *                      CONV_RELU_0_K · CONV_RELU_0_INPUT_FEATURES ·
+ *                      CONV_RELU_0_OUTPUT_FEATURES.
+ * @param conv_relu_1_w Kernel weights of the second convolutional layer. It
+ *                      must be a 2D array of apfixed values with shape
+ *                      CONV_RELU_1_K · CONV_RELU_1_INPUT_FEATURES ·
+ *                      CONV_RELU_1_OUTPUT_FEATURES.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          CONV_RELU_1_N · CONV_RELU_1_OUTPUT_FEATURES elements.
+ */
+template <apint UP_CONV_RELU_K, apint UP_CONV_RELU_INPUT_FEATURES, apint UP_CONV_RELU_OUTPUT_FEATURES, apint UP_CONV_RELU_N,
+          apint CONV_RELU_0_K, apint CONV_RELU_0_INPUT_FEATURES, apint CONV_RELU_0_OUTPUT_FEATURES, apint CONV_RELU_0_N,
+          apint CONV_RELU_1_K, apint CONV_RELU_1_INPUT_FEATURES, apint CONV_RELU_1_OUTPUT_FEATURES, apint CONV_RELU_1_N>
+void Decoder(apfixed_stream &x,
+             apfixed up_conv_relu_w[UP_CONV_RELU_K][UP_CONV_RELU_INPUT_FEATURES][UP_CONV_RELU_OUTPUT_FEATURES],
+             apfixed skip_conn[UP_CONV_RELU_N][UP_CONV_RELU_OUTPUT_FEATURES],
+             apfixed conv_relu_0_w[CONV_RELU_0_K][CONV_RELU_0_INPUT_FEATURES][CONV_RELU_0_OUTPUT_FEATURES],
+             apfixed conv_relu_1_w[CONV_RELU_1_K][CONV_RELU_1_INPUT_FEATURES][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed_stream &y){
+  
+  // Inline this function
+  #pragma HLS INLINE
+
+  // Declare the feature map streams
+  apfixed_stream upsampling_outstream("upsampling_outstream");
+  apfixed_stream up_conv_relu_outstream("up_conv_relu_outstream");
+  apfixed_stream concat_outstream("concat_outstream");
+  apfixed_stream conv_relu_0_outstream("conv_relu_0_outstream");
+
+  // Upsample the input
+  UpSample1D<UP_CONV_RELU_INPUT_FEATURES, UP_CONV_RELU_N>(x, upsampling_outstream);
+
+  // Apply the up convolution
+  Conv1D_ReLU<UP_CONV_RELU_K, UP_CONV_RELU_INPUT_FEATURES, UP_CONV_RELU_OUTPUT_FEATURES, UP_CONV_RELU_N>(upsampling_outstream, up_conv_relu_w, up_conv_relu_outstream);
+
+  // Concatenate the output of the up convolution with the skip connection
+  Concatenate<UP_CONV_RELU_OUTPUT_FEATURES, UP_CONV_RELU_N>(skip_conn, up_conv_relu_outstream, concat_outstream);
+
+  // Apply the first convolution
+  Conv1D_ReLU<CONV_RELU_0_K, CONV_RELU_0_INPUT_FEATURES, CONV_RELU_0_OUTPUT_FEATURES, CONV_RELU_0_N>(concat_outstream, conv_relu_0_w, conv_relu_0_outstream);
+
+  // Apply the second convolution
+  Conv1D_ReLU<CONV_RELU_1_K, CONV_RELU_1_INPUT_FEATURES, CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_0_outstream, conv_relu_1_w, y);
+}
+
+/**
+ * @brief Implementation of the decoder block. It is mean to be used under
+ *        Vivado HLS, so it is written to be synthesized into hardware.
+ * 
+ * It is composed of a 1d upsampling layer, a 1D convolutional layer, a
+ * concatenation layer that adds the skip connection coming from the encoder,
+ * and two 1d convolutional layers with ReLU activation. It is manually inlined
+ * into the top function.
+ * 
+ * @tparam UP_CONV_RELU_K Kernel size of the upsampling convolutional layer
+ * @tparam UP_CONV_RELU_INPUT_FEATURES Number of input features of the
+ *                                     upsampling convolutional layer
+ * @tparam UP_CONV_RELU_OUTPUT_FEATURES Number of output features of the
+ *                                      upsampling convolutional layer
+ * @tparam UP_CONV_RELU_N Number of time steps of the output of the upsampling
+ *                        convolutional layer
+ * @tparam CONV_RELU_0_K Kernel size of the first convolutional layer
+ * @tparam CONV_RELU_0_INPUT_FEATURES Number of input features of the first
+ *                                    convolutional layer
+ * @tparam CONV_RELU_0_OUTPUT_FEATURES Number of output features of the first
+ *                                     convolutional layer
+ * @tparam CONV_RELU_0_N Number of time steps of the first convolutional layer
+ * @tparam CONV_RELU_1_K Kernel size of the second convolutional layer
+ * @tparam CONV_RELU_1_INPUT_FEATURES Number of input features of the second
+ *                                    convolutional layer
+ * @tparam CONV_RELU_1_OUTPUT_FEATURES Number of output features of the second
+ *                                     convolutional layer
+ * @tparam CONV_RELU_1_N Number of time steps of the second convolutional layer
+ * @param x Input stream. It must be a stream of apfixed values. It must have
+ *          UP_CONV_RELU_N · UP_CONV_RELU_INPUT_FEATURES elements.
+ * @param up_conv_relu_w Kernel weights of the upsampling convolutional layer.
+ *                       It must be a 2D array of apfixed values with shape
+ *                       UP_CONV_RELU_K · UP_CONV_RELU_INPUT_FEATURES ·
+ *                       UP_CONV_RELU_OUTPUT_FEATURES.
+ * @param skip_conn Skip connection from the encoder. It must be a 2D array of
+ *                  apfixed values with shape UP_CONV_RELU_N · 
+ *                  UP_CONV_RELU_OUTPUT_FEATURES.
+ * @param conv_relu_0_w Kernel weights of the first convolutional layer. It
+ *                      must be a 2D array of apfixed values with shape
+ *                      CONV_RELU_0_K · CONV_RELU_0_INPUT_FEATURES ·
+ *                      CONV_RELU_0_OUTPUT_FEATURES.
+ * @param conv_relu_1_w Kernel weights of the second convolutional layer. It
+ *                      must be a 2D array of apfixed values with shape
+ *                      CONV_RELU_1_K · CONV_RELU_1_INPUT_FEATURES ·
+ *                      CONV_RELU_1_OUTPUT_FEATURES.
+ * @param y Output stream. It must be a stream of apfixed values. It will have
+ *          CONV_RELU_1_N · CONV_RELU_1_OUTPUT_FEATURES elements.
+ */
+template <apint UP_CONV_RELU_K, apint UP_CONV_RELU_INPUT_FEATURES, apint UP_CONV_RELU_OUTPUT_FEATURES, apint UP_CONV_RELU_N,
+          apint CONV_RELU_0_K, apint CONV_RELU_0_INPUT_FEATURES, apint CONV_RELU_0_OUTPUT_FEATURES, apint CONV_RELU_0_N,
+          apint CONV_RELU_1_K, apint CONV_RELU_1_INPUT_FEATURES, apint CONV_RELU_1_OUTPUT_FEATURES, apint CONV_RELU_1_N>
+void Decoder_pipelined(apfixed_stream &x,
+             apfixed up_conv_relu_w[UP_CONV_RELU_K][UP_CONV_RELU_INPUT_FEATURES][UP_CONV_RELU_OUTPUT_FEATURES],
+             apfixed skip_conn[UP_CONV_RELU_N][UP_CONV_RELU_OUTPUT_FEATURES],
+             apfixed conv_relu_0_w[CONV_RELU_0_K][CONV_RELU_0_INPUT_FEATURES][CONV_RELU_0_OUTPUT_FEATURES],
+             apfixed conv_relu_1_w[CONV_RELU_1_K][CONV_RELU_1_INPUT_FEATURES][CONV_RELU_1_OUTPUT_FEATURES],
+             apfixed_stream &y){
+  
+  // Inline this function
+  #pragma HLS INLINE
+
+  // Declare the feature map streams
+  apfixed_stream upsampling_outstream("upsampling_outstream");
+  apfixed_stream up_conv_relu_outstream("up_conv_relu_outstream");
+  apfixed_stream concat_outstream("concat_outstream");
+  apfixed_stream conv_relu_0_outstream("conv_relu_0_outstream");
+
+  // Upsample the input
+  UpSample1D<UP_CONV_RELU_INPUT_FEATURES, UP_CONV_RELU_N>(x, upsampling_outstream);
+
+  // Apply the up convolution
+  Conv1D_ReLU_pipelined<UP_CONV_RELU_K, UP_CONV_RELU_INPUT_FEATURES, UP_CONV_RELU_OUTPUT_FEATURES, UP_CONV_RELU_N>(upsampling_outstream, up_conv_relu_w, up_conv_relu_outstream);
+
+  // Concatenate the output of the up convolution with the skip connection
+  Concatenate<UP_CONV_RELU_OUTPUT_FEATURES, UP_CONV_RELU_N>(skip_conn, up_conv_relu_outstream, concat_outstream);
+
+  // Apply the first convolution
+  Conv1D_ReLU_pipelined<CONV_RELU_0_K, CONV_RELU_0_INPUT_FEATURES, CONV_RELU_0_OUTPUT_FEATURES, CONV_RELU_0_N>(concat_outstream, conv_relu_0_w, conv_relu_0_outstream);
+
+  // Apply the second convolution
+  Conv1D_ReLU_pipelined<CONV_RELU_1_K, CONV_RELU_1_INPUT_FEATURES, CONV_RELU_1_OUTPUT_FEATURES, CONV_RELU_1_N>(conv_relu_0_outstream, conv_relu_1_w, y);
+}
+
+
+void Segmenter(apfixed_stream &x,
+$enc_parameters_input_to_func               apfixed central_conv_relu_0_w[CENTRAL_CONV_RELU_0_K][CENTRAL_CONV_RELU_0_INPUT_FEATURES][CENTRAL_CONV_RELU_0_OUTPUT_FEATURES],
+               apfixed central_conv_relu_1_w[CENTRAL_CONV_RELU_1_K][CENTRAL_CONV_RELU_1_INPUT_FEATURES][CENTRAL_CONV_RELU_1_OUTPUT_FEATURES],
+$dec_parameters_input_to_func               apfixed final_conv_w[FINAL_CONV_K][FINAL_CONV_INPUT_FEATURES][FINAL_CONV_OUTPUT_FEATURES],
+               apfixed_stream &y){
+    
+  // Set the stream IOs as AXI Stream interfaces
+  #pragma HLS INTERFACE axis register forward port=x
+  #pragma HLS INTERFACE axis register reverse port=y
+  
+  // Set all the inputs to the function as s_axilite interfaces
+$enc_pragmas  #pragma HLS INTERFACE s_axilite port=central_conv_relu_0_w
+  #pragma HLS INTERFACE s_axilite port=central_conv_relu_1_w
+$dec_pragmas  #pragma HLS INTERFACE s_axilite port=final_conv_w
+
+  // Set the return port as an AXI Lite interface
+  #pragma HLS INTERFACE s_axilite port=return
+
+  // Initialize the feature maps memories for the skip connections$skip_conn_init
+  
+  // Initialize the feature maps streams$enc_feature_maps_streams_initialization
+
+  apfixed_stream central_conv_relu_0_outstream("central_conv_relu_0_outstream");
+  apfixed_stream central_conv_relu_1_outstream("central_conv_relu_1_outstream");
+$dec_feature_maps_streams_initialization
+
+  apfixed_stream final_conv_outstream("final_conv_outstream");
+
+  // Enoder part$encoder_block
+
+  // Central part
+  Conv1D_ReLU$central_pipeline<CENTRAL_CONV_RELU_0_K, CENTRAL_CONV_RELU_0_INPUT_FEATURES, CENTRAL_CONV_RELU_0_OUTPUT_FEATURES, CENTRAL_CONV_RELU_0_N>(enc_${max_enc_i}_outstream, central_conv_relu_0_w, central_conv_relu_0_outstream);
+  Conv1D_ReLU$central_pipeline<CENTRAL_CONV_RELU_1_K, CENTRAL_CONV_RELU_1_INPUT_FEATURES, CENTRAL_CONV_RELU_1_OUTPUT_FEATURES, CENTRAL_CONV_RELU_1_N>(central_conv_relu_0_outstream, central_conv_relu_1_w, central_conv_relu_1_outstream);
+
+  // Decoder part$decoder_block
+
+  // Final layer
+  Conv1D<FINAL_CONV_K, FINAL_CONV_INPUT_FEATURES, FINAL_CONV_OUTPUT_FEATURES, FINAL_CONV_N>(dec_${max_enc_i}_outstream, final_conv_w, final_conv_outstream);
+
+  // Argmax
+  Argmax<FINAL_CONV_OUTPUT_FEATURES, FINAL_CONV_N>(final_conv_outstream, y);
+}

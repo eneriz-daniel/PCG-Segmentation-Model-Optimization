@@ -1,0 +1,96 @@
+// Copyright (C) 2023 Daniel Enériz and Antonio Rodriguez-Almeida
+// 
+// This file is part of PCG Segmentation Model Optimization.
+// 
+// PCG Segmentation Model Optimization is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// PCG Segmentation Model Optimization is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with PCG Segmentation Model Optimization.  If not, see <http://www.gnu.org/licenses/>.
+
+/*------------------------------------------------------------------------------
+-------------------------------DEFINING DATA TYPE-------------------------------
+------------------------------------------------------------------------------*/
+
+#define {datatype} // FLOAT or FIXED
+
+/*------------------------------------------------------------------------------
+-------------------------------DEPENDENCIES-------------------------------------
+------------------------------------------------------------------------------*/
+
+#include <algorithm> //To use max() and min() (for 'same' padding method)
+#ifdef FIXED
+    #include "ap_fixed.h" //Fixed type support
+    #include "hls_math.h" //If fixed type is used
+#endif
+#ifdef FLOAT
+    #include <cmath> //If float type is used
+#endif
+
+
+/*------------------------------------------------------------------------------
+-------------------------------TESTING METHOD PARAMETERS------------------------
+------------------------------------------------------------------------------*/
+
+#define DATASET {dataset} //Name of the dataset. Must be either 2016 or 2022
+#define TEST_SAMPLES_BATCH {test_samples} //Number of samples in the test file, limited by the maximum allocable C++ array size
+#define TEST_FILES {test_files} //Number of test files
+#define TOTAL_SAMPLES {total_samples}
+
+/*------------------------------------------------------------------------------
+---------------------NEURAL NETOWRK ARCHITECTURE PARAMETERS---------------------
+------------------------------------------------------------------------------*/
+
+#define N_STATES {N_STATES} //Number of fundamental heart states
+#define N_FEATURES {N_FEATURES} //Number of input features
+#define N {N} //Window width in number of samples
+
+#define K 3 //Size of the kernels
+
+#define BASE_FILTER_SIZE {BASE_FILTER_SIZE} //Base filter size
+#define NENC {NENC} //Number of encoding/decoding blocks
+
+{layers_parameter_definition}
+#define FINAL_CONV_K K //Kernel size of the final_conv layer
+#define FINAL_CONV_INPUT_FEATURES BASE_FILTER_SIZE //Number of input features of the final_conv layer
+#define FINAL_CONV_OUTPUT_FEATURES N_STATES //Number of output features of the final_conv layer
+#define FINAL_CONV_N N //Number of frames in the time dimension of the final_conv layer
+
+/*------------------------------------------------------------------------------
+-----------------------------NEURAL NETWORK DATATYPES---------------------------
+------------------------------------------------------------------------------*/
+#ifdef FIXED
+    #define W {W} //Total number of bits in the fixed point representation
+    #define I {I} //Number of integer bits in the fixed point representation
+    typedef ap_fixed<W,I,AP_RND,AP_SAT> apfixed;
+    typedef int apint;
+    typedef ap_uint<18> apuint;
+
+    // Dynamically define EPSILON as the smallest representable absolute number in the fixed point representation
+    #define EPSILON (1.0/(1<<(W-I)))
+
+    // Dynamically define MIN_VALUE as the smallest representable number in the fixed point representation
+    #define MIN_VALUE  -(1 << (W-I-1))
+#endif
+#ifdef FLOAT
+    typedef float apfixed;
+    typedef int apint;
+    typedef int apuint;
+    #define EPSILON 1e-8
+#endif
+
+
+using namespace std;
+
+void Segmenter(apfixed x[N][N_FEATURES],
+{enc_parameters_input_to_func}               apfixed central_conv_relu_0_w[CENTRAL_CONV_RELU_0_K][CENTRAL_CONV_RELU_0_INPUT_FEATURES][CENTRAL_CONV_RELU_0_OUTPUT_FEATURES],
+               apfixed central_conv_relu_1_w[CENTRAL_CONV_RELU_1_K][CENTRAL_CONV_RELU_1_INPUT_FEATURES][CENTRAL_CONV_RELU_1_OUTPUT_FEATURES],
+{dec_parameters_input_to_func}               apfixed final_conv_w[FINAL_CONV_K][FINAL_CONV_INPUT_FEATURES][FINAL_CONV_OUTPUT_FEATURES],
+               apfixed y[N][N_STATES]);

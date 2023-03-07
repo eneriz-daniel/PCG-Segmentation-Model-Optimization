@@ -4,5 +4,9 @@ physionet.org/
 *-proc/
 *-CV/
 *.tgz
-models*
+*/models/
+*/models-cv/
 *__pycache__/
+*.tar
+implementation/csim-runs/
+implementation/synth-runs/

@@ -16,13 +16,13 @@ Therefore the repository two main folders: `training` and `implementation`. The 
 This code was tested with Python 3.9.10 under Ubuntu 20.04.2 LTS. The requirements are listed in the `requirements.txt` file. To install the requirements, you can use any Python package manager, such as `pip` or `conda`. For example, using `pip`:
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ pip install -r requirements.txt
+foo@bar:~/PCG-Segmentation-Model-Optimization$ pip install -r requirements.txt
 ```
 
 or using `conda`:
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ conda install --file requirements.txt
+foo@bar:~/PCG-Segmentation-Model-Optimization$ conda install --file requirements.txt
 ```
 
 ### Vivado HLS
@@ -32,7 +32,7 @@ The Vivado HLS tool is required to run the code for the FPGA implementation. The
 The HLS C Simulations and Synthesis processes are launched from Python code, therefore the `vivado_hls` executable must be accessible. Under Linux, you can enable this command by sourcing the Vivado `settings64.sh` command:
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ source /path/to/vivado_hls/settings64.sh
+foo@bar:~/PCG-Segmentation-Model-Optimization$ source /path/to/vivado_hls/settings64.sh
 ```
 
 ### Datasets
@@ -44,14 +44,15 @@ The datasets used in this project are not included in this repository. The datas
 Both datasets can be downloaded using `wget`:
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ wget -r -N -c -np wget https://physionet.org/files/hss/1.0/example_data.mat
+foo@bar:~/PCG-Segmentation-Model-Optimization$ wget -r -N -c -np wget https://physionet.org/files/hss/1.0/example_data.mat
 ```
 
 ```console
-foo@bar:~/PCG-Segmentation-Model-Optimization/$ wget -r -N -c -np https://physionet.org/files/circor-heart-sound/1.0.3/
+foo@bar:~/PCG-Segmentation-Model-Optimization$ wget -r -N -c -np https://physionet.org/files/circor-heart-sound/1.0.3/
 ```
 After downloading the datasets, the folder structure should be as follows:
-```
+```console
+foo@bar:~/PCG-Segmentation-Model-Optimization$ tree
 .
 ├── implementation
 │   └── ···
