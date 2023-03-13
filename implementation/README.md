@@ -150,4 +150,44 @@ The script will create a `csim-acc-{implementation}-{dataset}-W{W}I{I}.xlsx` fil
 
 ## HLS Synthesis
 
+The [`hls_launcher.py`](hls_launcher.py) script also enables the interaction with the HLS Synthesis. To launch the HLS Synthesis, you can use the following command:
+
+```console
+foo@bar:~/···/implementation$ python hls_launcher.py --synth 64 8 4 16 8
+```
+This will launch the HLS Synthesis for the model parameters combination `N=64`, `n0=8`, `nenc=4` using a (16, 8) fixed-point representation, which has 16 bits in total of which 8 are dedicated to the integer part. A `synth-runs` folder will be created in the `implementation` folder, containing the `preliminary/default/W16I8/N64n08nenc04` folder, which will contain the source, header and testbench files as well as HLS project, where the synthesis report will be written on the `segmenter-synth/solution1/syn/report/Segmenter_csynth.rpt` file.
+
+> Note that the dataset is not required to launch the HLS Synthesis, since the HLS Synthesis is not dependent on the dataset.
+
+As in the simulation mode, the default implementation used by `hls_launcher.py` is the `preliminary` implementation. You can launch the HLS Synthesis for the `stream` and `memory-sharing` implementations by using the `-s` and `-m` flags respectively. Also, the file-driven mode is supported by the `--synthid` flag, where the expected `.json` file is:
+```json
+{
+    "0" : 
+    {
+        "N" : 64,
+        "n0" : 8,
+        "nenc" : 4,
+        "W" : 16,
+        "I" : 8
+    },
+    "1" : ...
+}
+
+```
+
+Additionally, the `hls_launcher.py` supports the inclusion of optimization `pragma` directives in the source files through the `--pragmas` or `-p` argument. This will use the optimization directives found during the implementation optimization stage for the `N=64`, `n0=8`, `nenc=4` model. For other models, the `pragma` directives are extrapolated from the `N=64`, `n0=8`, `nenc=4` model. For example, the following command will launch the HLS Synthesis for the `N=64`, `n0=8`, `nenc=4` model using the `stream` optimized implementation:
+```console
+foo@bar:~/···/implementation$ python hls_launcher.py -s -p --synth 64 8 4 16 8
+```
+
 ### HLS Synthesis evaluation
+
+The `postsynth.py` is the CLI-enabled script to evaluate the HLS Synthesis results. This script will read the model synthesis results inside the `synth-runs` folder and will summarize the results in a `.xlsx` file per datatype. For example, the following command will evaluate the HLS Synthesis results for the `preliminary` implementation across all the `N`, `n0`, `nenc` using the (16, 8) datatype:
+```console
+foo@bar:~/···/implementation$ python postsynth.py -i preliminary
+```
+This will write the results in the `synth-preliminary-default-W16I8.xlsx` file inside the `synth-runs/preliminary/default/W16I8/` folder.
+
+As in the `postsim.py` script, a selection of the synthesized models can be done by using the `--N_list`, `--n0_list`, `--nenc_list` `--W_list` and `--I_list` flags.
+
+In this case, the analysis of the optimized implementation is also supported by using the `--pragmas` or `-p` flag.
