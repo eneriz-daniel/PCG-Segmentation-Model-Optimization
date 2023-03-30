@@ -76,6 +76,12 @@ foo@bar:~/PCG-Segmentation-Model-Optimization$ tree
 
 > If you want to use the datasets in a different folder, you must change the paths in the [`training/utils/preprocessing.py`](training/utils/preprocessing.py) script.
 
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+The authors of the project are Daniel Enériz and Antonio J. Rodríguez-Almeida.
+
 ## References
 
 [1] F. Renna, J. Oliveira and M. T. Coimbra, "Deep Convolutional Neural Networks for Heart Sound Segmentation," in *IEEE Journal of Biomedical and Health Informatics*, vol. 23, no. 6, pp. 2435-2445, Nov. 2019, doi: [10.1109/JBHI.2019.2894222](https://doi.org/10.1109/JBHI.2019.2894222).
