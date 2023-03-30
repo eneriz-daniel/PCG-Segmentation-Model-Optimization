@@ -78,8 +78,8 @@ foo@bar:~/PCG-Segmentation-Model-Optimization$ tree
 
 ## References
 
-[1] F. Renna, J. Oliveira and M. T. Coimbra, "Deep Convolutional Neural Networks for Heart Sound Segmentation," in *IEEE Journal of Biomedical and Health Informatics*, vol. 23, no. 6, pp. 2435-2445, Nov. 2019, doi: [10.1109/JBHI.2019.2894222](https://doi.org/10.1109/JBHI.2019.2894222).
+[1] F. Renna, J. Oliveira and M. T. Coimbra, "Deep Convolutional Neural Networks for Heart Sound Segmentation," *IEEE Journal of Biomedical and Health Informatics*, vol. 23, no. 6, pp. 2435-2445, Nov. 2019, doi: [10.1109/JBHI.2019.2894222](https://doi.org/10.1109/JBHI.2019.2894222).
 
-[2] C. Liu et al., ‘An open access database for the evaluation of heart sound algorithms’, *Physiol. Meas.*, vol. 37, no. 12, pp. 2181–2213, Dec. 2016, doi: [10.1088/0967-3334/37/12/2181](https://doi.org/10.1088/0967-3334/37/12/2181).
+[2] C. Liu et al., "An open access database for the evaluation of heart sound algorithms", *Physiol. Meas.*, vol. 37, no. 12, pp. 2181–2213, Dec. 2016, doi: [10.1088/0967-3334/37/12/2181](https://doi.org/10.1088/0967-3334/37/12/2181).
 
-[3] J. Oliveira et al., "The CirCor DigiScope Dataset: From Murmur Detection to Murmur Classification," in *IEEE Journal of Biomedical and Health Informatics*, vol. 26, no. 6, pp. 2524-2535, June 2022, doi: [10.1109/JBHI.2021.3137048](https://doi.org/10.1109/JBHI.2021.3137048).
+[3] J. Oliveira et al., "The CirCor DigiScope Dataset: From Murmur Detection to Murmur Classification," *IEEE Journal of Biomedical and Health Informatics*, vol. 26, no. 6, pp. 2524-2535, June 2022, doi: [10.1109/JBHI.2021.3137048](https://doi.org/10.1109/JBHI.2021.3137048).
