@@ -32,7 +32,7 @@ bs = 250 # Batch size for the csim, limited by the maximum size of an array in C
 #                       TEMPLATE BLOCKS FOR THE HLS CODE                       #
 ################################################################################
 
-preliminary_basic_encoder_params_def_block = """
+baseline_basic_encoder_params_def_block = """
 #define ENC_{i}_CONV_RELU_0_K K //Kernel size of the enc_{i}_conv_relu_0 layer
 #define ENC_{i}_CONV_RELU_0_INPUT_FEATURES {input_features} //Number of input features of the enc_{i}_conv_relu_0 layer
 #define ENC_{i}_CONV_RELU_0_OUTPUT_FEATURES {output_features} //Number of output features of the enc_{i}_conv_relu_0 layer
@@ -42,7 +42,7 @@ preliminary_basic_encoder_params_def_block = """
 #define ENC_{i}_CONV_RELU_1_OUTPUT_FEATURES {output_features} //Number of output features of the enc_{i}_conv_relu_1 layer
 #define ENC_{i}_CONV_RELU_1_N {N_dim} //Number of frames in the time dimension of the enc_{i}_conv_relu_1 layer
 """
-preliminary_basic_central_params_def_block = """
+baseline_basic_central_params_def_block = """
 #define CENTRAL_CONV_RELU_0_K K //Kernel size of the central_conv_relu_0 layer
 #define CENTRAL_CONV_RELU_0_INPUT_FEATURES {input_features} //Number of input features of the central_conv_relu_0 layer
 #define CENTRAL_CONV_RELU_0_OUTPUT_FEATURES {output_features} //Number of output features of the central_conv_relu_0 layer
@@ -53,7 +53,7 @@ preliminary_basic_central_params_def_block = """
 #define CENTRAL_CONV_RELU_1_N {N_dim} //Number of frames in the time dimension of the central_conv_relu_1 layer
 """
 
-preliminary_basic_decoder_params_def_block = """
+baseline_basic_decoder_params_def_block = """
 #define DEC_{i}_UP_CONV_RELU_K K //Kernel size of the dec_{i}_conv_relu_0 layer
 #define DEC_{i}_UP_CONV_RELU_INPUT_FEATURES {input_features} //Number of input features of the dec_{i}_up_conv_relu layer
 #define DEC_{i}_UP_CONV_RELU_OUTPUT_FEATURES {output_features} //Number of output features of the dec_{i}_up_conv_relu layer
@@ -68,36 +68,36 @@ preliminary_basic_decoder_params_def_block = """
 #define DEC_{i}_CONV_RELU_1_N {N_dim} //Number of frames in the time dimension of the dec_{i}_conv_relu_1 layer
 """
 
-preliminary_basic_enc_paramters_input_func=\
+baseline_basic_enc_paramters_input_func=\
 """               apfixed enc_{i}_conv_relu_0_w[ENC_{i}_CONV_RELU_0_K][ENC_{i}_CONV_RELU_0_INPUT_FEATURES][ENC_{i}_CONV_RELU_0_OUTPUT_FEATURES],
                apfixed enc_{i}_conv_relu_1_w[ENC_{i}_CONV_RELU_1_K][ENC_{i}_CONV_RELU_1_INPUT_FEATURES][ENC_{i}_CONV_RELU_1_OUTPUT_FEATURES],
 """
 
-preliminary_basic_dec_paramters_input_func=\
+baseline_basic_dec_paramters_input_func=\
 """               apfixed dec_{i}_up_conv_relu_w[DEC_{i}_UP_CONV_RELU_K][DEC_{i}_UP_CONV_RELU_INPUT_FEATURES][DEC_{i}_UP_CONV_RELU_OUTPUT_FEATURES],
                apfixed dec_{i}_conv_relu_0_w[DEC_{i}_CONV_RELU_0_K][DEC_{i}_CONV_RELU_0_INPUT_FEATURES][DEC_{i}_CONV_RELU_0_OUTPUT_FEATURES],
                apfixed dec_{i}_conv_relu_1_w[DEC_{i}_CONV_RELU_1_K][DEC_{i}_CONV_RELU_1_INPUT_FEATURES][DEC_{i}_CONV_RELU_1_OUTPUT_FEATURES],
 """
 
-preliminary_basic_enc_pragmas = \
+baseline_basic_enc_pragmas = \
 """  #pragma HLS INTERFACE s_axilite port=enc_{i}_conv_relu_0_w
   #pragma HLS INTERFACE s_axilite port=enc_{i}_conv_relu_1_w
 """
 
-preliminary_basic_dec_pragmas = \
+baseline_basic_dec_pragmas = \
 """  #pragma HLS INTERFACE s_axilite port=dec_{i}_up_conv_relu_w
   #pragma HLS INTERFACE s_axilite port=dec_{i}_conv_relu_0_w
   #pragma HLS INTERFACE s_axilite port=dec_{i}_conv_relu_1_w
 """
 
-preliminary_enc_basic_featuremap_init = \
+baseline_enc_basic_featuremap_init = \
 """
   apfixed enc_{i}_conv_relu_0[ENC_{i}_CONV_RELU_0_N][ENC_{i}_CONV_RELU_0_OUTPUT_FEATURES];
   apfixed enc_{i}_conv_relu_1[ENC_{i}_CONV_RELU_1_N][ENC_{i}_CONV_RELU_1_OUTPUT_FEATURES];
   apfixed enc_{i}_maxpool[ENC_{i}_CONV_RELU_1_N/2][ENC_{i}_CONV_RELU_1_OUTPUT_FEATURES];
 """
 
-preliminary_dec_basic_featuremap_init = \
+baseline_dec_basic_featuremap_init = \
 """
   apfixed dec_{i}_upsample[DEC_{i}_UP_CONV_RELU_N][DEC_{i}_UP_CONV_RELU_INPUT_FEATURES];
   apfixed dec_{i}_up_conv_relu[DEC_{i}_UP_CONV_RELU_N][DEC_{i}_UP_CONV_RELU_OUTPUT_FEATURES];
@@ -106,7 +106,7 @@ preliminary_dec_basic_featuremap_init = \
   apfixed dec_{i}_conv_relu_1[DEC_{i}_CONV_RELU_1_N][DEC_{i}_CONV_RELU_1_OUTPUT_FEATURES];
 """
 
-preliminary_basic_encoder_block = Template(
+baseline_basic_encoder_block = Template(
 """
   //-----------------------------ENCODER ${i}--------------------------------------
   //-------------------------enc_${i}_conv_relu_0----------------------------------
@@ -160,7 +160,7 @@ preliminary_basic_encoder_block = Template(
   //----------------------------------------------------------------------------
 """)
 
-preliminary_basic_decoder_block = Template(
+baseline_basic_decoder_block = Template(
 """
   //-----------------------------DECODER ${i}--------------------------------------
   //-----------------------------dec_${i}_upsample---------------------------------
@@ -245,7 +245,7 @@ preliminary_basic_decoder_block = Template(
   //----------------------------------------------------------------------------
 """)
 
-preliminary_basic_enc_parameters_array_init = \
+baseline_basic_enc_parameters_array_init = \
 """
     float enc_{i}_conv_relu_0_tmp[ENC_{i}_CONV_RELU_0_K*ENC_{i}_CONV_RELU_0_INPUT_FEATURES*ENC_{i}_CONV_RELU_0_OUTPUT_FEATURES];
     int enc_{i}_conv_relu_0_shape[4];
@@ -255,7 +255,7 @@ preliminary_basic_enc_parameters_array_init = \
     apfixed enc_{i}_conv_relu_1_w[ENC_{i}_CONV_RELU_1_K][ENC_{i}_CONV_RELU_1_INPUT_FEATURES][ENC_{i}_CONV_RELU_1_OUTPUT_FEATURES];
 """
 
-preliminary_basic_dec_parameters_array_init = \
+baseline_basic_dec_parameters_array_init = \
 """
     float dec_{i}_up_conv_relu_tmp[DEC_{i}_UP_CONV_RELU_K*DEC_{i}_UP_CONV_RELU_INPUT_FEATURES*DEC_{i}_UP_CONV_RELU_OUTPUT_FEATURES];
     int dec_{i}_up_conv_relu_shape[4];
@@ -268,7 +268,7 @@ preliminary_basic_dec_parameters_array_init = \
     apfixed dec_{i}_conv_relu_1_w[DEC_{i}_CONV_RELU_1_K][DEC_{i}_CONV_RELU_1_INPUT_FEATURES][DEC_{i}_CONV_RELU_1_OUTPUT_FEATURES];
 """
 
-preliminary_basic_enc_parameters_reading_block = Template(
+baseline_basic_enc_parameters_reading_block = Template(
 """
     sprintf(subdirectory,"models/%d/N%d/n0%d/nenc%d/parameters/enc_${i}_conv_relu_0.npy", DATASET, N, BASE_FILTER_SIZE, NENC);
     GetFlatArrFromNpy(parent_path+subdirectory, enc_${i}_conv_relu_0_tmp, enc_${i}_conv_relu_0_shape);
@@ -295,7 +295,7 @@ preliminary_basic_enc_parameters_reading_block = Template(
     }
 """)
 
-preliminary_basic_dec_parameters_reading_block = Template(
+baseline_basic_dec_parameters_reading_block = Template(
 """
     sprintf(subdirectory,"models/%d/N%d/n0%d/nenc%d/parameters/dec_${i}_up_conv_relu.npy", DATASET, N, BASE_FILTER_SIZE, NENC);
     GetFlatArrFromNpy(parent_path+subdirectory, dec_${i}_up_conv_relu_tmp, dec_${i}_up_conv_relu_shape);
@@ -334,12 +334,12 @@ preliminary_basic_dec_parameters_reading_block = Template(
     }
 """)
 
-preliminary_basic_enc_parameters_to_func_block = \
+baseline_basic_enc_parameters_to_func_block = \
 """          enc_{i}_conv_relu_0_w,
           enc_{i}_conv_relu_1_w,
 """
 
-preliminary_basic_dec_parameters_to_func_block = \
+baseline_basic_dec_parameters_to_func_block = \
 """          dec_{i}_up_conv_relu_w,
           dec_{i}_conv_relu_0_w,
           dec_{i}_conv_relu_1_w,
@@ -1178,10 +1178,10 @@ def generate_c_sources_memory_sharing(N: int, N_features: int, N_states: int,
             dec_parameters_to_func_block=dec_parameters_to_func_block,
         ))
 
-def generate_c_sources_preliminary(N: int, N_features: int, N_states: int,
+def generate_c_sources_baseline(N: int, N_features: int, N_states: int,
   base_filter_size: int, n_blocks: int, dataset : str, test_files: int, total_samples: int,
   test_samples: int, W: int, I: int, project_directory: str, data_directory: str) -> None:
-    """Generates the C sources for HLS using the preliminary architecture.
+    """Generates the C sources for HLS using the baseline architecture.
 
     Args:
     -----
@@ -1224,20 +1224,20 @@ def generate_c_sources_preliminary(N: int, N_features: int, N_states: int,
     enc_parameters_input_to_func = ""
     for i in range(n_blocks):
         if i==0:
-            parameters_definition_block += preliminary_basic_encoder_params_def_block.format(i=i, input_features='N_FEATURES', output_features='BASE_FILTER_SIZE', N_dim='N')
+            parameters_definition_block += baseline_basic_encoder_params_def_block.format(i=i, input_features='N_FEATURES', output_features='BASE_FILTER_SIZE', N_dim='N')
         else:
-            parameters_definition_block += preliminary_basic_encoder_params_def_block.format(i=i, input_features='BASE_FILTER_SIZE*{}'.format(2**(i-1)), output_features='BASE_FILTER_SIZE*{}'.format(2**i), N_dim='N/{}'.format(2**i))
+            parameters_definition_block += baseline_basic_encoder_params_def_block.format(i=i, input_features='BASE_FILTER_SIZE*{}'.format(2**(i-1)), output_features='BASE_FILTER_SIZE*{}'.format(2**i), N_dim='N/{}'.format(2**i))
 
-        enc_parameters_input_to_func += preliminary_basic_enc_paramters_input_func.format(i=i)
+        enc_parameters_input_to_func += baseline_basic_enc_paramters_input_func.format(i=i)
 
-    parameters_definition_block +=preliminary_basic_central_params_def_block.format(input_features = 'BASE_FILTER_SIZE*{}'.format(2**(n_blocks-1)), output_features = 'BASE_FILTER_SIZE*{}'.format(2**n_blocks), N_dim = 'N/{}'.format(2**n_blocks))
+    parameters_definition_block +=baseline_basic_central_params_def_block.format(input_features = 'BASE_FILTER_SIZE*{}'.format(2**(n_blocks-1)), output_features = 'BASE_FILTER_SIZE*{}'.format(2**n_blocks), N_dim = 'N/{}'.format(2**n_blocks))
 
     dec_parameters_input_to_func = ""
     for i in range(n_blocks):
-        parameters_definition_block += preliminary_basic_decoder_params_def_block.format(i=i, input_features='BASE_FILTER_SIZE*{}'.format(2**(n_blocks-i)), output_features='BASE_FILTER_SIZE*{}'.format(2**(n_blocks-i-1)), N_dim='N/{}'.format(2**(n_blocks-i-1)))
-        dec_parameters_input_to_func += preliminary_basic_dec_paramters_input_func.format(i=i)
+        parameters_definition_block += baseline_basic_decoder_params_def_block.format(i=i, input_features='BASE_FILTER_SIZE*{}'.format(2**(n_blocks-i)), output_features='BASE_FILTER_SIZE*{}'.format(2**(n_blocks-i-1)), N_dim='N/{}'.format(2**(n_blocks-i-1)))
+        dec_parameters_input_to_func += baseline_basic_dec_paramters_input_func.format(i=i)
 
-    with open('preliminary/segmenter_h_template.txt') as template:
+    with open('baseline/segmenter_h_template.txt') as template:
         h_template = template.read()
     with open('{}/segmenter.h'.format(project_directory), 'w') as h_file:
         h_file.write(h_template.format(
@@ -1266,18 +1266,18 @@ def generate_c_sources_preliminary(N: int, N_features: int, N_states: int,
     enc_pragmas = ""
     dec_pragmas = ""
     for i in range(n_blocks):
-        enc_pragmas += preliminary_basic_enc_pragmas.format(i=i)
-        dec_pragmas += preliminary_basic_dec_pragmas.format(i=i)
-        enc_feature_maps_initialization += preliminary_enc_basic_featuremap_init.format(i=i)
-        dec_feature_maps_initialization += preliminary_dec_basic_featuremap_init.format(i=i)
+        enc_pragmas += baseline_basic_enc_pragmas.format(i=i)
+        dec_pragmas += baseline_basic_dec_pragmas.format(i=i)
+        enc_feature_maps_initialization += baseline_enc_basic_featuremap_init.format(i=i)
+        dec_feature_maps_initialization += baseline_dec_basic_featuremap_init.format(i=i)
         if i == 0:
-            encoder_block += preliminary_basic_encoder_block.substitute(i=i, input_feature_map='x')
-            decoder_block += preliminary_basic_decoder_block.substitute(i=i, input_feature_map='central_conv_relu_1', res_feature_map='enc_{}_conv_relu_1'.format(n_blocks-i-1))
+            encoder_block += baseline_basic_encoder_block.substitute(i=i, input_feature_map='x')
+            decoder_block += baseline_basic_decoder_block.substitute(i=i, input_feature_map='central_conv_relu_1', res_feature_map='enc_{}_conv_relu_1'.format(n_blocks-i-1))
         else:
-            encoder_block += preliminary_basic_encoder_block.substitute(i=i, input_feature_map='enc_{}_maxpool'.format(i-1))
-            decoder_block += preliminary_basic_decoder_block.substitute(i=i, input_feature_map='dec_{}_conv_relu_1'.format(i-1), res_feature_map='enc_{}_conv_relu_1'.format(n_blocks-i-1))     
+            encoder_block += baseline_basic_encoder_block.substitute(i=i, input_feature_map='enc_{}_maxpool'.format(i-1))
+            decoder_block += baseline_basic_decoder_block.substitute(i=i, input_feature_map='dec_{}_conv_relu_1'.format(i-1), res_feature_map='enc_{}_conv_relu_1'.format(n_blocks-i-1))     
 
-    with open('preliminary/segmenter_cpp_template.txt') as template:
+    with open('baseline/segmenter_cpp_template.txt') as template:
         s_template = Template(template.read())
     with open('{}/segmenter.cpp'.format(project_directory), 'w') as s:
         s.write(s_template.substitute(
@@ -1299,14 +1299,14 @@ def generate_c_sources_preliminary(N: int, N_features: int, N_states: int,
     enc_parameters_to_func_block = ""
     dec_parameters_to_func_block = ""
     for i in range(n_blocks):
-        enc_parameters_init_block += preliminary_basic_enc_parameters_array_init.format(i=i)
-        dec_parameters_init_block += preliminary_basic_dec_parameters_array_init.format(i=i)
-        enc_parameters_reading_block += preliminary_basic_enc_parameters_reading_block.substitute(i=i)
-        dec_parameters_reading_block += preliminary_basic_dec_parameters_reading_block.substitute(i=i)
-        enc_parameters_to_func_block += preliminary_basic_enc_parameters_to_func_block.format(i=i)
-        dec_parameters_to_func_block += preliminary_basic_dec_parameters_to_func_block.format(i=i)
+        enc_parameters_init_block += baseline_basic_enc_parameters_array_init.format(i=i)
+        dec_parameters_init_block += baseline_basic_dec_parameters_array_init.format(i=i)
+        enc_parameters_reading_block += baseline_basic_enc_parameters_reading_block.substitute(i=i)
+        dec_parameters_reading_block += baseline_basic_dec_parameters_reading_block.substitute(i=i)
+        enc_parameters_to_func_block += baseline_basic_enc_parameters_to_func_block.format(i=i)
+        dec_parameters_to_func_block += baseline_basic_dec_parameters_to_func_block.format(i=i)
 
-    with open('preliminary/segmenter_tb_cpp_template.txt') as template:
+    with open('baseline/segmenter_tb_cpp_template.txt') as template:
         s_template = Template(template.read())
     with open('{}/segmenter_tb.cpp'.format(project_directory), 'w') as s:
         s.write(s_template.substitute(
@@ -1373,7 +1373,7 @@ def save_model_paramters_as_npy(model: Model, directory: str, n_blocks: int):
 def launch_csim(project_directory: str, data_directory: str, N: int,
   base_filter: int, n_blocks: int, dataset : str, W: int = None,
   I: int = None, subprocess: bool = False, timing: bool = False,
-  implementation: str = 'preliminary'):
+  implementation: str = 'baseline'):
   """Launchs a vivado_hls csim.
   
     Args:
@@ -1394,13 +1394,13 @@ def launch_csim(project_directory: str, data_directory: str, N: int,
       timing (bool): If True, the csim is launched with the timing option,
       annotating the starting time and the ending time of the csim. It only
       works if subprocess is False. Default: False.
-      implementation (str): The implementation to use. Must be either 'preliminary',
-      'memory-sharing' or 'stream'. Default: 'preliminary'.
+      implementation (str): The implementation to use. Must be either 'baseline',
+      'memory-sharing' or 'stream'. Default: 'baseline'.
   """
 
-  # If implementation is not preliminary, memory_sharing or stream raise an error
-  if implementation not in ['preliminary', 'memory-sharing', 'stream']:
-    raise ValueError('implementation must be either preliminary, memory_sharing or stream.')
+  # If implementation is not baseline, memory_sharing or stream raise an error
+  if implementation not in ['baseline', 'memory-sharing', 'stream']:
+    raise ValueError('implementation must be either baseline, memory_sharing or stream.')
 
   # If directory does not end with '/' add it
   if project_directory[-1] != '/':
@@ -1429,8 +1429,8 @@ def launch_csim(project_directory: str, data_directory: str, N: int,
   elif implementation == 'memory-sharing':
     generate_c_sources_memory_sharing(N, 4, 4, base_filter, n_blocks, dataset, test_data_elements//bs+1,
       test_data_elements, bs, W, I, project_directory, data_directory, optimized = False)
-  elif implementation == 'preliminary':
-    generate_c_sources_preliminary(N, 4, 4, base_filter, n_blocks, dataset, test_data_elements//bs+1,
+  elif implementation == 'baseline':
+    generate_c_sources_baseline(N, 4, 4, base_filter, n_blocks, dataset, test_data_elements//bs+1,
       test_data_elements, bs, W, I, project_directory, data_directory)
   
   # Copy npy_reading.h and csim-launcher.tcl to the project directory
@@ -1459,7 +1459,7 @@ def launch_csim(project_directory: str, data_directory: str, N: int,
     
 def launch_synthesis(project_directory: str, N: int, base_filter: int,
   n_blocks: int,  W: int = None, I: int = None, subprocess: bool = False,
-  implementation : str = 'preliminary', optimized: bool = True):
+  implementation : str = 'baseline', optimized: bool = True):
   """Launches the synthesis of the described model and saves the results.
   
   Args:
@@ -1475,15 +1475,15 @@ def launch_synthesis(project_directory: str, N: int, base_filter: int,
     floating point data is used. Default: None.
     subprocess (bool): If True, the csim is launched as a subprocess. If False,
     the csim is launched using os.system. Default: False.
-    implementation (str): The implementation to use. Must be either 'preliminary',
-    'memory-sharing' or 'stream'. Default: 'preliminary'.
+    implementation (str): The implementation to use. Must be either 'baseline',
+    'memory-sharing' or 'stream'. Default: 'baseline'.
     optimized (bool): If True, the optimized version of the model is used. If False,
     the non-optimized version of the model is used. Default: True.
   """
 
-  # If implementation is not preliminary, memory_sharing or stream raise an error
-  if implementation not in ['preliminary', 'memory-sharing', 'stream']:
-    raise ValueError('implementation must be either preliminary, memory_sharing or stream.')
+  # If implementation is not baseline, memory_sharing or stream raise an error
+  if implementation not in ['baseline', 'memory-sharing', 'stream']:
+    raise ValueError('implementation must be either baseline, memory_sharing or stream.')
 
   #Fix dataset since it is not used
   dataset = '2016'
@@ -1501,8 +1501,8 @@ def launch_synthesis(project_directory: str, N: int, base_filter: int,
     generate_c_sources_stream(N, 4, 4, base_filter, n_blocks, dataset, 1, 1, 1, W, I, project_directory, project_directory, optimized) # Arbitrary values can be used for non-structural arguments for synthesis
   elif implementation == 'memory-sharing':
     generate_c_sources_memory_sharing(N, 4, 4, base_filter, n_blocks, dataset, 1, 1, 1, W, I, project_directory, project_directory, optimized) # Arbitrary values can be used for non-structural arguments for synthesis
-  elif implementation == 'preliminary':
-    generate_c_sources_preliminary(N, 4, 4, base_filter, n_blocks, dataset, 1, 1, 1, W, I, project_directory, project_directory)
+  elif implementation == 'baseline':
+    generate_c_sources_baseline(N, 4, 4, base_filter, n_blocks, dataset, 1, 1, 1, W, I, project_directory, project_directory)
   
   # Copy synth-launcher.tcl to the project directory
   shutil.copyfile('synth-launcher.tcl', project_directory + 'synth-launcher.tcl')

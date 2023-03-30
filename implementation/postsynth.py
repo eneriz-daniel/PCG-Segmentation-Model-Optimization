@@ -27,7 +27,7 @@
 # optional arguments:
 #   -h, --help            show this help message and exit
 #   --implementation IMPLEMENTATION, -i IMPLEMENTATION
-#                         The implementation to analyze. Can be "preliminary",
+#                         The implementation to analyze. Can be "baseline",
 #                         "memory-sharing" or "stream".
 #   --pragmas, -p         Analyze the optimized implementation if passed. If
 #                         not, it will use the default implementation results.
@@ -58,7 +58,7 @@ import json
 
 # Parse the arguments
 parser = argparse.ArgumentParser(description='Post-synthesis analysis.')
-parser.add_argument('--implementation', '-i', type=str, help='The implementation to analyze. Can be "preliminary", "memory-sharing" or "stream".', required=True)
+parser.add_argument('--implementation', '-i', type=str, help='The implementation to analyze. Can be "baseline", "memory-sharing" or "stream".', required=True)
 parser.add_argument('--pragmas', '-p', action='store_true', help='Analyze the optimized implementation if passed. If not, it will use the default implementation results.', default=False)
 parser.add_argument('--N_list', type=int, nargs='+', default=[64, 128, 256, 512], help='The N values to analyze. Defaults to 64, 128, 256 and 512.')
 parser.add_argument('--n0_list', type=int, nargs='+', default=[8,7,6,5,4], help='The n0 values to analyze. Defaults to 8, 7, 6, 5 and 4.')
@@ -72,8 +72,8 @@ WI_group.add_argument('--I_list', type=int, nargs='+', default=[8], help='The I 
 args = parser.parse_args()
 
 # Check the implementation is valid
-if args.implementation not in ['preliminary', 'memory-sharing', 'stream']:
-  raise ValueError('Invalid implementation. Must be "preliminary", "memory-sharing" or "stream".')
+if args.implementation not in ['baseline', 'memory-sharing', 'stream']:
+  raise ValueError('Invalid implementation. Must be "baseline", "memory-sharing" or "stream".')
 
 WI_list = [[W, I] for W in args.W_list for I in args.I_list if W > I]
 

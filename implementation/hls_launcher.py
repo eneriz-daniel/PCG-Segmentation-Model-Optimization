@@ -25,8 +25,8 @@
 # optional arguments:
 #   -h, --help            show this help message and exit
 #   -b, --background      Run as subprocess
-#   -m, --memory_sharing  Run memory_sharing implementation. If not passed, preliminary version is used.
-#   -s, --stream          Run stream implementation. If not passed, preliminary version is used.
+#   -m, --memory_sharing  Run memory_sharing implementation. If not passed, baseline version is used.
+#   -s, --stream          Run stream implementation. If not passed, baseline version is used.
 #   -p, --pragmas         Use pragmas to optimize HLS implementation. It only affects in synthesis.
 #   --csim N n0 nenc dataset W I
 #                         Launch csim using custom arguments
@@ -58,10 +58,10 @@ parser.add_argument('-b', '--background', help='Run as subprocess', action='stor
 implementation_type_group = parser.add_mutually_exclusive_group(required=False)
 
 # Parse memory_sharing implementation flag
-implementation_type_group.add_argument('-m', '--memory_sharing', help='Run memory_sharing implementation. If not passed, preliminary version is used.', action='store_true')
+implementation_type_group.add_argument('-m', '--memory_sharing', help='Run memory_sharing implementation. If not passed, baseline version is used.', action='store_true')
 
 # Parse stream implementation flag
-implementation_type_group.add_argument('-s', '--stream', help='Run stream implementation. If not passed, preliminary version is used.', action='store_true')
+implementation_type_group.add_argument('-s', '--stream', help='Run stream implementation. If not passed, baseline version is used.', action='store_true')
 
 # Parse optimization flags. If used, pragmas are used to optimize the HLS implementation
 parser.add_argument('-p', '--pragmas', help='Use pragmas to optimize HLS implementation. It only affects in synthesis.', action='store_true')
@@ -94,8 +94,8 @@ elif args.stream:
     print('Running stream implementation')
     implementation_type = 'stream'
 else:
-    print('Running preliminary implementation')
-    implementation_type = 'preliminary'
+    print('Running baseline implementation')
+    implementation_type = 'baseline'
 
 if args.pragmas:
     print('Using pragmas to optimize HLS implementation')

@@ -7,7 +7,7 @@ This repository is the code for the paper [Optimizing Heart Sound Segmentation D
 ## Basic files description
 
 This folder contains the three different C++ implementations templates tested for the PCG segmentation model, the Python scripts used to generate the input data and the models C++ implementations, and to launch the HLS C Simulations and Synthesis. As described in the paper, the three different implementations are:
-- A simple C++ implementation of the model, whose templates are in the [`preliminary`](preliminary) folder.
+- A simple C++ implementation of the model, whose templates are in the [`baseline`](baseline) folder.
 - A memory optimized C++ implementation of the model, where the feature maps share the same memory space. The templates are in the [`memory-sharing`](memory-sharing) folder.
 - A streaming dataflow C++ implementation of the model, where the feature maps are streamed through the network. The templates are in the [`stream`](stream) folder.
 
@@ -99,9 +99,9 @@ The [`hls_launcher.py`](hls_launcher.py) enables the interaction with this funct
 foo@bar:~/···/implementation$ python hls_launcher.py --csim 64 8 4 2016 16 8
 ```
 
-This will launch the HLS C Simulation for the model parameters combination `N=64`, `n0=8`, `nenc=4` over the 2016 dataset using a (16, 8) fixed-point representation, which has 16 bits in total of which 8 are dedicated to the integer part. A `csim-runs` folder will be created in the `implementation` folder, containing the `preliminary/2016/W16I8/N64n08nenc04` folder, which will contain the source, header and testbench files as well as HLS project and the C Simulation results, which will be written on the `csim-results.txt` file. This will contain the flattened output of the model, i.e., there will be one line for each test data sample with 4×`N` elements.
+This will launch the HLS C Simulation for the model parameters combination `N=64`, `n0=8`, `nenc=4` over the 2016 dataset using a (16, 8) fixed-point representation, which has 16 bits in total of which 8 are dedicated to the integer part. A `csim-runs` folder will be created in the `implementation` folder, containing the `baseline/2016/W16I8/N64n08nenc04` folder, which will contain the source, header and testbench files as well as HLS project and the C Simulation results, which will be written on the `csim-results.txt` file. This will contain the flattened output of the model, i.e., there will be one line for each test data sample with 4×`N` elements.
 
-The default implementation used by `hls_launcher.py` is the `preliminary` implementation. You can launch the HLS C Simulation for the `stream` and `memory-sharing` implementations by using the `-s` and `-m` flags respectively. For example, to launch the HLS C Simulation for the `stream` implementation, you can use the following command:
+The default implementation used by `hls_launcher.py` is the `baseline` implementation. You can launch the HLS C Simulation for the `stream` and `memory-sharing` implementations by using the `-s` and `-m` flags respectively. For example, to launch the HLS C Simulation for the `stream` implementation, you can use the following command:
 ```console
 foo@bar:~/···/implementation$ python hls_launcher.py -s --csim 64 8 4 2016 16 8
 ```
@@ -138,11 +138,11 @@ foo@bar:~/···/implementation$ python hls_launcher.py -s --csimid csim_ids.jso
 
 To automate the evaluation of the different HLS C Simulations, the [`postsim.py`](postsim.py) script can be used. This script will read the `csim-results.txt` files and will calculate the metrics of the models. To launch the script, you must specify the implementaton type results you want to evaluate, that must be either `prelimimnary`, `memory.sharing` or `stream`. For the first one, you can use the following command:
 ```console
-foo@bar:~/···/implementation$ python postsim.py -i preliminary
+foo@bar:~/···/implementation$ python postsim.py -i baseline
 ```
 This will analyze, the model resulting of all parameters combinations on both datasets with the (16, 8) datatypes. To specify the datasets, model parameters and datatypes combinations to be analyzed, you can use the `--datasets_list`, `--N_list`, `--n0_list`, `--nenc_list` `--W_list` and `--I_list` flags. For example, to analyze the models resulting of the `N=[64, 128]`, `n0=[8, 6, 4]`, `nenc=4` model parameters combination over the 2016 dataset using the (16, 8), (16, 4) and (16, 2) datatypes, you can use the following command:
 ```console
-foo@bar:~/···/implementation$ python postsim.py -i preliminary --datasets_list 2016 --N_list 64 128 --n0_list 8 6 4 --nenc_list 4 --W_list 16 --I_list 8 4 2
+foo@bar:~/···/implementation$ python postsim.py -i baseline --datasets_list 2016 --N_list 64 128 --n0_list 8 6 4 --nenc_list 4 --W_list 16 --I_list 8 4 2
 ```
 > Note that the datatype selection is formed from the combination of the `W_list` and `I_list` flags. Thus, only combinations where `W` is greater than `I` are considered.
 
@@ -155,11 +155,11 @@ The [`hls_launcher.py`](hls_launcher.py) script also enables the interaction wit
 ```console
 foo@bar:~/···/implementation$ python hls_launcher.py --synth 64 8 4 16 8
 ```
-This will launch the HLS Synthesis for the model parameters combination `N=64`, `n0=8`, `nenc=4` using a (16, 8) fixed-point representation, which has 16 bits in total of which 8 are dedicated to the integer part. A `synth-runs` folder will be created in the `implementation` folder, containing the `preliminary/default/W16I8/N64n08nenc04` folder, which will contain the source, header and testbench files as well as HLS project, where the synthesis report will be written on the `segmenter-synth/solution1/syn/report/Segmenter_csynth.rpt` file.
+This will launch the HLS Synthesis for the model parameters combination `N=64`, `n0=8`, `nenc=4` using a (16, 8) fixed-point representation, which has 16 bits in total of which 8 are dedicated to the integer part. A `synth-runs` folder will be created in the `implementation` folder, containing the `baseline/default/W16I8/N64n08nenc04` folder, which will contain the source, header and testbench files as well as HLS project, where the synthesis report will be written on the `segmenter-synth/solution1/syn/report/Segmenter_csynth.rpt` file.
 
 > Note that the dataset is not required to launch the HLS Synthesis, since the HLS Synthesis is not dependent on the dataset.
 
-As in the simulation mode, the default implementation used by `hls_launcher.py` is the `preliminary` implementation. You can launch the HLS Synthesis for the `stream` and `memory-sharing` implementations by using the `-s` and `-m` flags respectively. Also, the file-driven mode is supported by the `--synthid` flag, where the expected `.json` file is:
+As in the simulation mode, the default implementation used by `hls_launcher.py` is the `baseline` implementation. You can launch the HLS Synthesis for the `stream` and `memory-sharing` implementations by using the `-s` and `-m` flags respectively. Also, the file-driven mode is supported by the `--synthid` flag, where the expected `.json` file is:
 ```json
 {
     "0" : 
@@ -182,11 +182,11 @@ foo@bar:~/···/implementation$ python hls_launcher.py -s -p --synth 64 8 4 16 
 
 ### HLS Synthesis evaluation
 
-The `postsynth.py` is the CLI-enabled script to evaluate the HLS Synthesis results. This script will read the model synthesis results inside the `synth-runs` folder and will summarize the results in a `.xlsx` file per datatype. For example, the following command will evaluate the HLS Synthesis results for the `preliminary` implementation across all the `N`, `n0`, `nenc` using the (16, 8) datatype:
+The `postsynth.py` is the CLI-enabled script to evaluate the HLS Synthesis results. This script will read the model synthesis results inside the `synth-runs` folder and will summarize the results in a `.xlsx` file per datatype. For example, the following command will evaluate the HLS Synthesis results for the `baseline` implementation across all the `N`, `n0`, `nenc` using the (16, 8) datatype:
 ```console
-foo@bar:~/···/implementation$ python postsynth.py -i preliminary
+foo@bar:~/···/implementation$ python postsynth.py -i baseline
 ```
-This will write the results in the `synth-preliminary-default-W16I8.xlsx` file inside the `synth-runs/preliminary/default/W16I8/` folder.
+This will write the results in the `synth-baseline-default-W16I8.xlsx` file inside the `synth-runs/baseline/default/W16I8/` folder.
 
 As in the `postsim.py` script, a selection of the synthesized models can be done by using the `--N_list`, `--n0_list`, `--nenc_list` `--W_list` and `--I_list` flags.
 

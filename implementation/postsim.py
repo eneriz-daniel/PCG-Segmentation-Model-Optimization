@@ -28,7 +28,7 @@
 # optional arguments:
 #   -h, --help            show this help message and exit
 #   --implementation IMPLEMENTATION, -i IMPLEMENTATION
-#                         The implementation to analyze. Can be "preliminary",
+#                         The implementation to analyze. Can be "baseline",
 #                         "memory-sharing" or "stream".
 #   --datasets_list DATASETS_LIST [DATASETS_LIST ...]
 #                         The datasets to analyze. Defaults to 2016 and 2022.
@@ -112,7 +112,7 @@ def evaluate_csim(project_directory: str, model: Model, X: np.ndarray, S: np.nda
 
 # Parse the arguments
 parser = argparse.ArgumentParser(description='Post-simulation analysis of CSim results.')
-parser.add_argument('--implementation', '-i', type=str, help='The implementation to analyze. Can be "preliminary", "memory-sharing" or "stream".', required=True)
+parser.add_argument('--implementation', '-i', type=str, help='The implementation to analyze. Can be "baseline", "memory-sharing" or "stream".', required=True)
 parser.add_argument('--datasets_list', type=int, nargs='+', default=[2016, 2022], help='The datasets to analyze. Defaults to 2016 and 2022.')
 parser.add_argument('--N_list', type=int, nargs='+', default=[64, 128, 256, 512], help='The N values to analyze. Defaults to 64, 128, 256 and 512.')
 parser.add_argument('--n0_list', type=int, nargs='+', default=[8,7,6,5,4], help='The n0 values to analyze. Defaults to 8, 7, 6, 5 and 4.')
@@ -126,8 +126,8 @@ WI_group.add_argument('--I_list', type=int, nargs='+', default=[8], help='The I 
 args = parser.parse_args()
 
 # Check the implementation is valid
-if args.implementation not in ['preliminary', 'memory-sharing', 'stream']:
-  raise ValueError('Invalid implementation. Must be "preliminary", "memory-sharing" or "stream".')
+if args.implementation not in ['baseline', 'memory-sharing', 'stream']:
+  raise ValueError('Invalid implementation. Must be "baseline", "memory-sharing" or "stream".')
 
 WI_list = [[W, I] for W in args.W_list for I in args.I_list if W > I]
 

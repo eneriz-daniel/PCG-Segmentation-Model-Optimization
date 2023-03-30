@@ -1670,7 +1670,7 @@ def label_2016_pcg_positions(envelopes: np.ndarray, annotations: Tuple[np.ndarra
         s[int(r_peak[i]):int(r_peak[i] + mean_S1)] = 1
 
         # Set the spaces between this S1 and the next end-T-wave as the second
-        # state to preliminary label them
+        # state to baseline label them
         # To find the next end-T-wave, compute the differences between this
         # R-peak and the end-T-wave positions
         diffs = end_t_wave - r_peak[i]
