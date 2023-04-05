@@ -9,6 +9,8 @@ This project aims to optimize the heart sound segmentation deep model presented 
 
 Therefore the repository two main folders: `training` and `implementation`. The first one contains the code for the training of the model with the selected model parameters, and the second one contains the code for the optimization of the model for FPGA implementation using the Vivado High-Level Synthesis (HLS) tool. Additionally, in each folder there is auxiliary code to preprocess the data, evaluate the model and generate summary reports. In each folder there is a `README.md` file with more details about the code and the usage of the scripts.
 
+Also, the complete results report of the experiments is available in the [`complete-results.xlsx`](complete-results.xlsx) file. The results are organized in the different sheets of the file.
+
 ## Requirements
 
 ### Python dependencies
