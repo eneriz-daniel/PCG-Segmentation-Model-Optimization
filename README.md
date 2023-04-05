@@ -1,6 +1,6 @@
 # PCG Segmentation Model Optimization
 
-This repository is the code for the paper [Optimizing Heart Sound Segmentation Deep Model for Low-Cost FPGA Implementation](). If you use this code, please cite the following paper.
+This repository is the code for the paper [Optimizing Heart Sound Segmentation Deep Model Targeting Real-Time and Low-Cost FPGA Implementation](). If you use this code, please cite the following paper.
 
 ```bibtext
 ```
