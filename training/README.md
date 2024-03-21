@@ -1,6 +1,6 @@
 # PCG Segmentation Model Optimization: Training
 
-This repository is the code for the paper [Optimizing Heart Sound Segmentation Deep Model Targeting Real-Time and Low-Cost FPGA Implementation](). If you use this code, please cite the following paper.
+This repository is the code for the paper [Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening](). If you use this code, please cite the following paper.
 
 ```bibtext
 ```
