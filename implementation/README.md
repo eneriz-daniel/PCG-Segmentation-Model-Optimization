@@ -1,8 +1,18 @@
 # PCG Segmentation Model Optimization: Implementation
 
-This repository is the code for the paper [Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening](). If you use this code, please cite the following paper.
+This repository is the code for the paper [Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening](https://ieeexplore.ieee.org/document/10506694). If you use this code, please cite the following paper.
 
 ```bibtext
+@ARTICLE{10506694,
+  author={Enériz, Daniel and Rodriguez-Almeida, Antonio J. and Fabelo, Himar and Ortega, Samuel and Balea-Fernandez, Francisco J. and Callico, Gustavo M. and Medrano, Nicolás and Calvo, Belén},
+  journal={IEEE Transactions on Instrumentation and Measurement}, 
+  title={Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening}, 
+  year={2024},
+  volume={},
+  number={},
+  pages={1-1},
+  keywords={Field programmable gate arrays;Integrated circuit modeling;Real-time systems;Phonocardiography;Hardware;Analytical models;Adaptation models;Convolutional neural networks;computer-aid diagnostic;cardiovascular diseases detection;deep learning;edge AI;embedded systems;FPGA;heart sound segmentation},
+  doi={10.1109/TIM.2024.3392271}}
 ```
 ## Basic files description
 

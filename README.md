@@ -1,8 +1,18 @@
 # PCG Segmentation Model Optimization
 
-This repository is the code for the paper [Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening](). If you use this code, please cite the following paper.
+This repository is the code for the paper [Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening](https://ieeexplore.ieee.org/document/10506694). If you use this code, please cite the following paper.
 
 ```bibtext
+@ARTICLE{10506694,
+  author={Enériz, Daniel and Rodriguez-Almeida, Antonio J. and Fabelo, Himar and Ortega, Samuel and Balea-Fernandez, Francisco J. and Callico, Gustavo M. and Medrano, Nicolás and Calvo, Belén},
+  journal={IEEE Transactions on Instrumentation and Measurement}, 
+  title={Low-Cost FPGA Implementation of Deep Learning-based Heart Sound Segmentation for Real-Time CVDs Screening}, 
+  year={2024},
+  volume={},
+  number={},
+  pages={1-1},
+  keywords={Field programmable gate arrays;Integrated circuit modeling;Real-time systems;Phonocardiography;Hardware;Analytical models;Adaptation models;Convolutional neural networks;computer-aid diagnostic;cardiovascular diseases detection;deep learning;edge AI;embedded systems;FPGA;heart sound segmentation},
+  doi={10.1109/TIM.2024.3392271}}
 ```
 
 This project aims to optimize the heart sound segmentation deep model presented in [1] for low-cost FPGA implementation, tested over the [2016 PhysioNet/Computing in Cardiology Challenge](https://moody-challenge.physionet.org/2016/) dataset [2] and the CirCor Digiscope dataset [3] (which was used for the George B. Moody/Physionet dataset). Firstly, two model reduction parameters are identified: the number of filters and the number of encoding/decoding layers. Then, the model is optimized for FPGA implementation using two different strategies: memory sharing for feature maps allocation and streaming for dataflow implementation. Additionally, fixed-point representation is used to reduce the memory footprint of the model.
